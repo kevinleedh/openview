@@ -177,11 +177,6 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
     private let inputMinHeight: CGFloat = 36
     private let inputMaxHeight: CGFloat = 120          // ~5 lines, then the inner scroll takes over
     private let sendButton = NSButton()
-    // F8 model selector: a pull-down-style button showing the current model; clicking opens the unified
-    // Settings popover (dynamic model list + verify switch + API key). Replaces the Settings-1 gear strip,
-    // whose controls were relocated INTO the popover (ModelSettingsPopover).
-    private let modelButton = NSButton()
-    private var settingsPopover: NSPopover?
 
     /// Per-turn grounded sentences, kept so a chip click can resolve turnIndex:sentenceIndex → Citation.
     private var turns: [[GroundedSentence]] = []
@@ -311,28 +306,13 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
         composer.spacing = 8
         composer.alignment = .bottom         // Send tracks the LAST line as the input grows upward
 
-        // F8 model selector: a pull-down-style button showing the current model. The panel's TOP is occluded
-        // by the window toolbar, so it sits just ABOVE the composer (always visible) and opens the unified
-        // Settings popover (model list + verify + API key).
-        modelButton.image = NSImage(systemSymbolName: "chevron.up.chevron.down", accessibilityDescription: nil)
-        modelButton.imagePosition = .imageTrailing
-        modelButton.bezelStyle = .rounded
-        modelButton.controlSize = .small
-        modelButton.target = self
-        modelButton.action = #selector(showModelPopover)
-        modelButton.setContentHuggingPriority(.required, for: .horizontal)
-        updateModelButtonTitle()
-        let modelSpacer = NSView()
-        modelSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let modelRow = NSStackView(views: [modelButton, modelSpacer])
-        modelRow.orientation = .horizontal
-        modelRow.distribution = .fill
-
-        // Hairline divider above the model selector — separates the chat thread from the bottom composer area.
+        // Hairline divider above the composer — separates the chat thread from the input area. (The former
+        // model-selector chip was removed: generation is a single Apple Intelligence path, so a 1-item
+        // dropdown was meaningless.)
         let composerDivider = NSBox()
         composerDivider.boxType = .separator
 
-        let stack = NSStackView(views: [statusBanner, scrollView, composerDivider, modelRow, composer])
+        let stack = NSStackView(views: [statusBanner, scrollView, composerDivider, composer])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.distribution = .fill
@@ -349,7 +329,6 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
             stack.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             stack.bottomAnchor.constraint(equalTo: root.bottomAnchor),
             // Children fill the panel width.
-            modelRow.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24),
             composerDivider.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24),
             statusBanner.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24),
             scrollView.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24),
@@ -384,33 +363,6 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
         inputContainer.effectiveAppearance.performAsCurrentDrawingAppearance {
             layer.borderColor = (inputFocused ? NSColor.controlAccentColor : NSColor.separatorColor).cgColor
         }
-    }
-
-    // MARK: – F8 model selector + Settings popover
-
-    /// Title the selector button with the current model (Apple by id, else the stored display name).
-    private func updateModelButtonTitle() {
-        modelButton.title = (Settings.selectedModelId == ModelOption.appleId)
-            ? ModelOption.apple.displayName
-            : Settings.selectedModelName
-    }
-
-    /// Toggle the unified Settings popover (dynamic model list + verify switch + API key) from the selector
-    /// button. The popover writes `Settings` directly; its `onChange` re-titles the button.
-    @objc private func showModelPopover() {
-        let pop: NSPopover
-        if let existing = settingsPopover {
-            pop = existing
-        } else {
-            pop = NSPopover()
-            let vc = ModelSettingsPopover()
-            vc.onChange = { [weak self] in self?.updateModelButtonTitle() }
-            pop.contentViewController = vc
-            pop.behavior = .transient
-            settingsPopover = pop
-        }
-        if pop.isShown { pop.close() }
-        else { pop.show(relativeTo: modelButton.bounds, of: modelButton, preferredEdge: .maxY) }
     }
 
     // MARK: – Public API (called by DocumentEngine, main thread)

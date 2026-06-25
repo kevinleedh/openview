@@ -293,7 +293,9 @@ extension DocumentWindowController: NSToolbarDelegate {
                                                 "Get Info", #selector(showInfo(_:)))
         case ItemID.share:    return makeShareItem()
         case ItemID.search:   return makeSearchItem()
-        case ItemID.aiToggle: return makeButton(ItemID.aiToggle, "sparkles", "wand.and.stars",
+        // Official Apple Intelligence SF Symbol (macOS 26+); `safeSymbol` falls back to "sparkles" where it's
+        // absent, so the button is never blank. NOT a hand-drawn glow image — the system symbol or sparkles.
+        case ItemID.aiToggle: return makeButton(ItemID.aiToggle, "apple.intelligence", "sparkles",
                                                 "AI Panel", #selector(toggleAIPanel(_:)))
         default:              return nil
         }
