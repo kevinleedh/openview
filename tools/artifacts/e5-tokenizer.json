@@ -1,0 +1,9 @@
+{
+  "do_lower_case": true,
+  "cls_id": 101,
+  "sep_id": 102,
+  "pad_id": 0,
+  "unk_id": 100,
+  "max_len": 256,
+  "vocab_size": 30522
+}

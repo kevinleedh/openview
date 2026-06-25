@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Openview — Preview + AI</title>
+  <meta name="description" content="A native macOS PDF viewer with on-device AI. Preview + AI = Openview." />
+  <style>
+    :root { --fg: #111; --bg: #fff; --muted: #6b6b6b; --line: #e6e6e6; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #f2f2f2; --bg: #0a0a0a; --muted: #9a9a9a; --line: #222; }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: var(--bg); color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+      display: flex; flex-direction: column; min-height: 100%;
+    }
+    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .wrap { text-align: center; max-width: 640px; }
+    .eq { font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); margin-bottom: 28px; }
+    h1 { font-size: clamp(48px, 12vw, 104px); font-weight: 700; letter-spacing: -.03em; line-height: .95; }
+    .tag { margin-top: 18px; font-size: clamp(15px, 2.6vw, 19px); color: var(--muted); line-height: 1.5; }
+    .cta { margin-top: 40px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; align-items: center; }
+    .btn {
+      display: inline-block; padding: 14px 30px; border-radius: 999px;
+      background: var(--fg); color: var(--bg); text-decoration: none;
+      font-size: 16px; font-weight: 600; transition: opacity .15s ease;
+    }
+    .btn:hover { opacity: .82; }
+    .meta { margin-top: 14px; font-size: 13px; color: var(--muted); }
+    footer { padding: 24px; text-align: center; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+    a.plain { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="wrap">
+      <div class="eq">Preview&nbsp;+&nbsp;AI&nbsp;=&nbsp;Openview</div>
+      <h1>Openview</h1>
+      <p class="tag">A native macOS PDF viewer with on-device AI.<br />Read, highlight, and ask — right inside the document.</p>
+      <div class="cta">
+        <!-- TODO: replace href with the notarized .dmg direct link (e.g. the GitHub Release asset URL). -->
+        <a class="btn" id="download" href="REPLACE_WITH_DOWNLOAD_URL" download>Download for macOS</a>
+      </div>
+      <p class="meta">Universal · macOS 14+ · Apple silicon</p>
+    </div>
+  </main>
+  <footer>© Openview · Requires macOS 14 or later.</footer>
+</body>
+</html>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Openview Hardened-Runtime entitlements. EMPTY by default (minimal privilege): launching the external
+  `ollama serve` process and hitting localhost do NOT require any entitlement under Hardened Runtime, and the
+  app is non-sandboxed (Developer ID direct distribution).
+
+  Only add an exception below if notarization is rejected or the app crashes at runtime, then re-sign:
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>  <true/>   (JIT / unsigned exec memory)
+    <key>com.apple.security.cs.allow-jit</key>                         <true/>   (MAP_JIT)
+    <key>com.apple.security.cs.disable-library-validation</key>        <true/>   (load 3rd-party dylibs/plugins)
+  Add the fewest that fix the actual failure (check: xcrun notarytool log <id> --keychain-profile AC_NOTARY).
+-->
+<plist version="1.0">
+<dict>
+</dict>
+</plist>

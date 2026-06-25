@@ -1,0 +1,7 @@
+# Core ML model weights → Git LFS.
+# The e5 embedder ships as a .mlpackage DIRECTORY; its weights live in
+# tools/artifacts/e5-small-v2.mlpackage/Data/com.apple.CoreML/weights/weight.bin (~63 MB).
+# weight.bin is the only *.bin in the repo, and CoreML always names weights *.bin, so this catches it
+# path-independently (survives a model re-conversion). Small tokenizer/config files (vocab.txt, *.json,
+# the 132 KB model.mlmodel) deliberately stay in normal git.
+*.bin filter=lfs diff=lfs merge=lfs -text
