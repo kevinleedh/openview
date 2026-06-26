@@ -23,7 +23,6 @@ final class DocumentEngine {
         ai.onAsk = { [weak self] question in self?.ask(question) }
         ai.onCitationClick = { [weak self] citation in self?.pdf?.jumpHighlight(citation) }
         ai.onSummarize = { [weak self] in self?.summarize() }
-        ai.onSummarizeWithCloud = { [weak self] in self?.summarizeWithCloud() }   // F8 2b: short-doc cloud upgrade
     }
 
     /// Kick off ingestion. Reuses an existing index instantly; otherwise embeds in the background while
@@ -192,9 +191,9 @@ final class DocumentEngine {
 
     /// Summarize the whole open document with Apple Foundation Models. Text comes from PDFKit
     /// (`pdfView.document?.string`) — in-memory, no sidecar, no index dependency. Extraction + inference run
-    /// off the main thread; the panel renders an explicitly UNVERIFIED summary card.
+    /// off the main thread; the panel renders the summary as a normal Q&A turn (request bubble + answer).
     private func summarize() {
-        // The panel already showed the summary card (handleSummarize → beginSummary); the engine only fills it.
+        // The panel already showed the request as a Q&A turn (handleSummarize → beginSummary); fill the answer.
         // PDFKit's PDFDocument is main-thread-affine, so the cheap gates + any `.string` extraction run on main;
         // only the model call (on-device or cloud network) goes off-main.
         guard let document = pdf?.pdfView.document else {
@@ -228,7 +227,7 @@ final class DocumentEngine {
                 for try await partial in SummarizationService.summarizeStream(text) {
                     await MainActor.run { self.ai?.streamSummary(partial) }
                 }
-                await MainActor.run { self.ai?.completeSummary(offerCloud: true) }   // offer a cloud re-summary
+                await MainActor.run { self.ai?.completeSummary() }
             } catch let e as SummarizationError {
                 if case .contextWindowExceeded = e {                 // underestimate → escalate to cloud
                     await MainActor.run { self.cloudSummarize(document) }
@@ -241,22 +240,12 @@ final class DocumentEngine {
         }
     }
 
-    /// F8 2b: the user clicked "[Summarize with cloud]" on a completed on-device summary card. The panel has
-    /// already re-seated that card into a "Summarizing with cloud…" state; just run the cloud summarize.
-    private func summarizeWithCloud() {
-        guard let document = pdf?.pdfView.document else {
-            ai?.failSummary("Couldn't find a document to summarize.")
-            return
-        }
-        cloudSummarize(document)
-    }
-
     /// CLOUD summarize (Swift-direct Anthropic, NO sidecar — keeps F8 sidecar-free + light on the 8GB box).
     /// Extracts the full document text (per-page concat for fidelity), ensures a key exists (prompting when
-    /// missing — framed as a capability, not a failure), then fills the SAME orange UNVERIFIED card. UI +
+    /// missing — framed as a capability, not a failure), then fills the same Q&A answer. UI +
     /// extraction + the modal prompt run on main; only the network call is off-main.
     private func cloudSummarize(_ document: PDFDocument) {
-        ai?.cloudSummarizing()                                        // card → "Summarizing with cloud…"
+        ai?.cloudSummarizing()                                        // keep the "Generating…" placeholder
         let text = Self.fullText(document)
         guard !text.isEmpty else {
             ai?.failSummary("Couldn't extract text from this document. It may be a scanned (image) PDF.")
@@ -276,7 +265,7 @@ final class DocumentEngine {
                 let summary = try await CloudSummarizer.summarize(text)
                 await MainActor.run {
                     self.ai?.streamSummary(summary)                  // single fill (non-streaming first cut)
-                    self.ai?.completeSummary(offerCloud: false)      // already cloud → don't re-offer
+                    self.ai?.completeSummary()
                 }
             } catch let e as SummarizationError {
                 await MainActor.run { self.ai?.failSummary(e.errorDescription ?? "Cloud summarization failed.") }

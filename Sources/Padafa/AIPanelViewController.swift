@@ -76,70 +76,6 @@ private final class PanelBackgroundView: NSView {
     }
 }
 
-/// A tinted, rounded card for the F8 AI **summary** — deliberately UNLIKE a verified Q&A answer (which is
-/// bare text with blue `[p.N]` chips and NO background). The card carries a header band + a body text view;
-/// the tint distinguishes summary (orange = unverified) from info (blue = needs cloud) from error (red). It
-/// re-resolves its CGColor fill/border on Light↔Dark itself (same trap as PanelBackgroundView). A summary
-/// NEVER shows citation chips — blue chips remain reserved for verified, jumpable sources.
-private final class SummaryCard: NSStackView {
-    let header = NSTextField(labelWithString: "")
-    let body = NSTextField(wrappingLabelWithString: "")   // wrapping label auto-heights for its width (no
-                                                          // NSTextView intrinsic-height-in-AutoLayout pitfall)
-    private var tint: NSColor = .systemOrange
-
-    init() {
-        super.init(frame: .zero)
-        // The card IS a vertical stack (header + body) — same structure as the Q&A answerHost, so the body's
-        // wrapped height propagates and the card grows to fit the whole summary. edgeInsets give the padding.
-        orientation = .vertical
-        alignment = .leading
-        spacing = 6
-        edgeInsets = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
-        translatesAutoresizingMaskIntoConstraints = false
-        wantsLayer = true
-        layer?.cornerRadius = 8
-        layer?.borderWidth = 1
-        header.font = .systemFont(ofSize: 11, weight: .semibold)
-        header.lineBreakMode = .byWordWrapping; header.maximumNumberOfLines = 0
-        body.font = .systemFont(ofSize: 13)
-        body.lineBreakMode = .byWordWrapping; body.maximumNumberOfLines = 0
-        body.isSelectable = true
-        addArrangedSubview(header)
-        addArrangedSubview(body)
-        // Bind both labels to the content width (card width − left/right insets) so they wrap, not truncate.
-        header.widthAnchor.constraint(equalTo: widthAnchor, constant: -24).isActive = true
-        body.widthAnchor.constraint(equalTo: widthAnchor, constant: -24).isActive = true
-        applyColors()
-    }
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); applyColors() }
-
-    func setTint(_ color: NSColor) { tint = color; applyColors() }
-
-    /// Optional trailing action button (e.g. "[Summarize with cloud]"). Pass nil to remove it. Appended as a
-    /// third arranged subview below the body — a NON-chip control (the card still has zero citation chips).
-    private weak var actionButton: NSButton?
-    func setActionButton(_ title: String?, target: AnyObject?, action: Selector?) {
-        if let existing = actionButton { removeArrangedSubview(existing); existing.removeFromSuperview() }
-        actionButton = nil
-        guard let title, let action else { return }
-        let b = NSButton(title: title, target: target, action: action)
-        b.bezelStyle = .rounded
-        b.controlSize = .small
-        addArrangedSubview(b)
-        actionButton = b
-    }
-
-    private func applyColors() {
-        guard let layer else { return }
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer.backgroundColor = tint.withAlphaComponent(0.10).cgColor
-            layer.borderColor = tint.withAlphaComponent(0.45).cgColor
-        }
-    }
-}
-
 /// The right-hand AI panel — Stage 3 makes it functional and wires it to the ported grounding engine.
 /// It renders the spec's core-loop states (S0 analyzing · S1 ready · S2 thinking · S3 grounded/partial/
 /// not-found · S5 error). Answers are shown as flowing text with inline, clickable `[p.N]` / `[p.N +k]`
@@ -152,12 +88,8 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
     var onCitationClick: ((Citation) -> Void)?
     /// F8: request a whole-document summary (Apple Foundation Models, separate from the grounded Q&A path).
     var onSummarize: (() -> Void)?
-    /// F8 2b: re-summarize the current document with the cloud model (the "[Summarize with cloud]" option).
-    var onSummarizeWithCloud: (() -> Void)?
 
     private let notFoundCopy = "Couldn't find supporting evidence in this document."
-    /// F8 unverified-summary header — must read clearly as NOT a verified answer (spec hard requirement).
-    private let unverifiedLabel = "⚠ AI Summary · Whole document · Sources not verified"
 
     private enum State { case analyzing, ready, thinking }
     private var state: State = .analyzing { didSet { applyState() } }
@@ -182,11 +114,6 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
     private var turns: [[GroundedSentence]] = []
     private weak var pendingAnswerHost: NSStackView?
     private weak var pendingStreamView: SelfSizingTextView?   // the in-flight streamed (unverified) answer body
-    private weak var pendingSummary: SummaryCard?          // the in-flight F8 summary card
-    private weak var lastAppleSummaryCard: SummaryCard?    // a COMPLETED on-device card, so its "[Summarize
-                                                          // with cloud]" button can re-seat it for cloud
-    private var isSummarizing = false                      // F8 lock — separate from the Q&A State (summary
-                                                          // is sidecar-free, so it must not depend on ingest)
     private var citationPopover: NSPopover?
 
     // MARK: – Layout
@@ -525,107 +452,39 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
         scrollToBottom()
     }
 
-    // MARK: – F8 summary (Apple Foundation Models; separate from the verified Q&A path above)
+    // MARK: – Whole-document summary — rendered as a NORMAL Q&A turn (request bubble + plain answer).
+    // The engine still calls these begin/stream/complete/info/fail hooks; they now just delegate to the Q&A
+    // renderers so a summary looks exactly like a question and its answer (no orange card / no "Sources not
+    // verified" header / no cloud-upgrade button) — what the user asked for.
 
-    /// Show the unverified-summary card immediately (orange, header band, "Summarizing…" body) and lock
-    /// input while it generates. The card stays orange-with-warning the whole time so it can NEVER be
-    /// mistaken for a verified answer; `streamSummary` then fills the body progressively.
-    func beginSummary() {
-        let card = SummaryCard()
-        card.setTint(.systemOrange)
-        card.header.stringValue = unverifiedLabel
-        card.header.textColor = .systemOrange
-        setSummaryBody(card, "Summarizing…", color: .secondaryLabelColor)
-        threadStack.addArrangedSubview(card)
-        card.widthAnchor.constraint(equalTo: threadStack.widthAnchor).isActive = true
-        pendingSummary = card
-        isSummarizing = true
-        applyState()                     // lock input/send/summarize without touching the Q&A State (ingest may run)
-        scrollToBottom()
+    /// The user's summary REQUEST becomes a right-side question bubble + a "Generating…" answer host.
+    func beginSummary(_ request: String) {
+        beginQuestion(request)
     }
 
-    /// Progressive update — `cumulative` is the whole summary so far. Body stays muted (secondaryLabel) and
-    /// has NO citation chips, the deliberate contrast with verified answers (labelColor + blue chips).
+    /// Progressive summary text → fills the answer like a streamed Q&A answer (Markdown, normal label color).
     func streamSummary(_ cumulative: String) {
-        guard let card = pendingSummary else { return }
-        setSummaryBody(card, cumulative.isEmpty ? "Summarizing…" : cumulative, color: .secondaryLabelColor)
-        scrollToBottom()
+        streamAnswer(cumulative)
     }
 
-    /// Generation finished — the body already holds the final text; release the lock. When `offerCloud` is
-    /// true (a completed ON-DEVICE summary), attach a "[Summarize with cloud]" button so the user can
-    /// optionally re-summarize the same document with the stronger cloud model.
-    func completeSummary(offerCloud: Bool = false) {
-        if offerCloud, let card = pendingSummary {
-            card.setActionButton("Summarize with cloud", target: self, action: #selector(handleSummarizeWithCloud))
-            lastAppleSummaryCard = card
-        }
-        pendingSummary = nil
-        isSummarizing = false
-        applyState()                     // restore input/send per the REAL state (ingest may still be running)
-        scrollToBottom()
+    /// Summary finished → finalize (the Q&A style has no cloud-upgrade button).
+    func completeSummary() {
+        finishStreamedAnswer()
     }
 
-    /// Engine signals the cloud path is starting — update the in-flight card's progress text (distinct from
-    /// the on-device "Summarizing…", so it's clear the request is going to the cloud).
+    /// Cloud summary starting (non-streaming) — keep the "Generating…" placeholder; the summary replaces it.
     func cloudSummarizing() {
-        guard let card = pendingSummary else { return }
-        setSummaryBody(card, "Summarizing with cloud…", color: .secondaryLabelColor)
         scrollToBottom()
     }
 
-    /// "[Summarize with cloud]" tapped on a completed on-device card → re-seat that card into a cloud
-    /// "Summarizing…" state and ask the engine to run the cloud summarize in place.
-    @objc private func handleSummarizeWithCloud() {
-        guard !isSummarizing, state != .thinking, let card = lastAppleSummaryCard else { return }
-        card.setActionButton(nil, target: nil, action: nil)          // drop the button while it runs
-        card.setTint(.systemOrange)                                   // still an UNVERIFIED summary
-        card.header.stringValue = unverifiedLabel
-        card.header.textColor = .systemOrange
-        setSummaryBody(card, "Summarizing with cloud…", color: .secondaryLabelColor)
-        pendingSummary = card
-        isSummarizing = true
-        applyState()
-        onSummarizeWithCloud?()
-    }
-
-    /// Document too large for the on-device model — recolor the card to a neutral INFO style (blue, no
-    /// "AI Summary" header) so it does not read as a produced summary, and show the cloud-coming message.
+    /// Informational outcome (e.g. a large document needs a cloud key) → render the message as a plain answer.
     func infoSummary(_ message: String) {
-        let card = pendingSummary ?? newStandaloneSummaryCard()
-        card.setTint(.systemBlue)
-        card.header.stringValue = "ℹ Larger document"
-        card.header.textColor = .systemBlue
-        setSummaryBody(card, message, color: .secondaryLabelColor)
-        pendingSummary = nil
-        isSummarizing = false
-        applyState()
-        scrollToBottom()
+        completeUnverifiedAnswer(message)
     }
 
-    /// Apple Intelligence unavailable / extraction failed / generation error — red card, clear reason.
+    /// Summarization failed → render as a normal Q&A error.
     func failSummary(_ message: String) {
-        let card = pendingSummary ?? newStandaloneSummaryCard()
-        card.setTint(.systemRed)
-        card.header.stringValue = "⚠ Summarization unavailable"
-        card.header.textColor = .systemRed
-        setSummaryBody(card, message, color: .systemRed)
-        pendingSummary = nil
-        isSummarizing = false
-        applyState()
-        scrollToBottom()
-    }
-
-    private func setSummaryBody(_ card: SummaryCard, _ text: String, color: NSColor) {
-        card.body.stringValue = text
-        card.body.textColor = color
-    }
-
-    private func newStandaloneSummaryCard() -> SummaryCard {
-        let card = SummaryCard()
-        threadStack.addArrangedSubview(card)
-        card.widthAnchor.constraint(equalTo: threadStack.widthAnchor).isActive = true
-        return card
+        completeError(message)
     }
 
     // MARK: – State
@@ -649,10 +508,6 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
             sendButton.isEnabled = false
             statusBanner.isHidden = true
         }
-        if isSummarizing {                               // a summary is generating — lock everything (incl.
-            setInputEnabled(false)                       // a concurrent ingest's setReady) until it finishes,
-            sendButton.isEnabled = false                 // without entangling the Q&A State machine
-        }
     }
 
     private var inputIsEmpty: Bool {
@@ -673,7 +528,7 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
         // The Summarize button is gone — a summary is requested in chat. Detect that intent and route to the
         // whole-document summary path; everything else is a normal grounded/on-device question.
         if Self.isSummaryRequest(question) {
-            handleSummarize()
+            handleSummarize(question)
             return
         }
         beginQuestion(question)
@@ -709,11 +564,11 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
         text.lowercased().contains("summar")                    // summary / summarize / summarise
     }
 
-    private func handleSummarize() {
-        // No need to wait for ingest (summary is sidecar-free); only block a second summary or an in-flight
-        // question. `beginSummary` shows the question turn is replaced by the orange unverified summary card.
-        guard !isSummarizing, state != .thinking else { return }
-        beginSummary()
+    private func handleSummarize(_ request: String) {
+        // A summary is rendered as a normal Q&A turn (request bubble + plain answer). Only reachable from
+        // .ready (handleSend's guard), so no separate summarizing lock is needed.
+        guard state == .ready else { return }
+        beginSummary(request)
         onSummarize?()
     }
 
@@ -739,9 +594,9 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
     private var currentInputText: String { inputTextView.string }
 
     /// (A) The one Send-enable rule: any non-whitespace character → enabled, but only while truly sendable
-    /// (document ready, not summarizing). Called on every edit (user OR programmatic) and on clear.
+    /// (document ready). Called on every edit (user OR programmatic) and on clear.
     private func updateSendEnabled() {
-        if state == .ready && !isSummarizing { sendButton.isEnabled = !inputIsEmpty }
+        if state == .ready { sendButton.isEnabled = !inputIsEmpty }
     }
 
     private func setInputText(_ s: String) {
