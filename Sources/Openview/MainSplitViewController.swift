@@ -1,8 +1,9 @@
 import AppKit
 
 /// The 2-pane reading layout (CLAUDE.md): center source PDF (fixed, never collapsed) | right AI panel
-/// (collapsible, expanded by default). A third LEFT item — the on-demand thumbnails/TOC/search-results
-/// sidebar — is collapsed by default and revealed from the view-options menu / ⌘F.
+/// (collapsible, CLOSED by default — revealed by the ✦ toolbar toggle or the "Ask" selection pill). A third
+/// LEFT item — the on-demand thumbnails/TOC/search-results sidebar — is collapsed by default and revealed
+/// from the view-options menu / ⌘F.
 final class MainSplitViewController: NSSplitViewController {
 
     let sidebar = SidebarViewController()
@@ -63,7 +64,7 @@ final class MainSplitViewController: NSSplitViewController {
         let inspector = NSSplitViewItem(viewController: ai)
         inspector.minimumThickness = 280
         inspector.canCollapse = true
-        inspector.isCollapsed = false                           // AI panel expanded by default
+        inspector.isCollapsed = true                            // AI panel CLOSED by default (toolbar ✦ / Ask reveals it)
         addSplitViewItem(inspector)
         aiItem = inspector
 

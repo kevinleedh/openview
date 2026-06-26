@@ -16,7 +16,9 @@ final class DocumentWindowController: NSWindowController {
     private var splitVC: MainSplitViewController { contentViewController as! MainSplitViewController }
     private var engine: DocumentEngine?
     private var searchItem: NSSearchToolbarItem?
-    private var zoomGroup: NSToolbarItemGroup?
+    private var zoomOutItem: NSToolbarItem?
+    private var zoomActualItem: NSToolbarItem?
+    private var zoomInItem: NSToolbarItem?
     private weak var sidebarMenu: NSMenu?
     private weak var markupSegment: NSSegmentedControl?   // highlighter | chevron-menu (Preview-style pill)
     private weak var markupMenu: NSMenu?                 // color + style menu (checkmarks via menuNeedsUpdate)
@@ -32,7 +34,13 @@ final class DocumentWindowController: NSWindowController {
 
     private enum ItemID {
         static let sidebar  = NSToolbarItem.Identifier("sidebar")
-        static let zoom     = NSToolbarItem.Identifier("zoom")
+        // Zoom is THREE separate bordered buttons (not one NSToolbarItemGroup): AppKit auto-groups adjacent
+        // bordered items onto one glass pill (so it still looks like Preview's −/1/+), but separate items
+        // overflow CLEANLY into the » menu when the window narrows — a group instead collapses into a janky
+        // chevron-pulldown (the "zoom looks weird when small" bug).
+        static let zoomOut    = NSToolbarItem.Identifier("zoomOut")
+        static let zoomActual = NSToolbarItem.Identifier("zoomActual")
+        static let zoomIn     = NSToolbarItem.Identifier("zoomIn")
         static let rotate   = NSToolbarItem.Identifier("rotate")
         static let markup   = NSToolbarItem.Identifier("markup")
         static let text     = NSToolbarItem.Identifier("text")
@@ -43,8 +51,15 @@ final class DocumentWindowController: NSWindowController {
     }
 
     convenience init() {
+        // Open at a MEDIUM size relative to the screen (not tiny, not full-screen). Capped so it stays "medium"
+        // on large displays and shrinks to fit small laptops. Only the DEFAULT — the autosaved frame (below)
+        // takes over once the user resizes.
+        let visible = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let w = min(1180, visible.width * 0.76)
+        let h = min(820, visible.height * 0.86)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1200, height: 780),
+            contentRect: NSRect(x: 0, y: 0, width: w, height: h),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false)
@@ -69,7 +84,15 @@ final class DocumentWindowController: NSWindowController {
         toolbar.allowsUserCustomization = false
         window.toolbar = toolbar
 
-        let autosaveName = "OpenviewDocumentWindow"
+        // Setting `contentViewController` above resized the window DOWN to the split view's small fitting size
+        // (more so now that the AI panel is collapsed by default), which `center()` would then preserve and
+        // autosave as "small". Restore the intended MEDIUM content size here, after the content view is in place;
+        // the autosaved frame (if any) overrides it below.
+        window.setContentSize(NSSize(width: w, height: h))
+
+        // Bumped to .v3 so a stale (tiny) saved frame from earlier builds is dropped once → reopens at the
+        // medium default above, then persists the user's choice from there.
+        let autosaveName = "OpenviewDocumentWindow.v3"
         // Only a *visible* sibling window counts as occupying the saved frame — otherwise a second open
         // would cascade off a closed window's stale name. (close() frees the window; the check must look
         // at what's actually on screen, not every window AppKit still tracks.)
@@ -187,15 +210,6 @@ final class DocumentWindowController: NSWindowController {
     @objc func setMarkupUnderlineStyle(_ sender: Any?)     { splitVC.pdf.setMarkupType(.underline) }
     @objc func setMarkupStrikethroughStyle(_ sender: Any?) { splitVC.pdf.setMarkupType(.strikethrough) }
 
-    // Zoom group: one momentary segment fired → dispatch by index (0 out · 1 actual size · 2 in).
-    @objc private func zoomSegment(_ sender: NSToolbarItemGroup) {
-        switch sender.selectedIndex {
-        case 0: splitVC.pdf.zoomOut()
-        case 1: splitVC.pdf.actualSize()
-        case 2: splitVC.pdf.zoomIn()
-        default: break
-        }
-    }
 
     @objc func showInfo(_ sender: Any?) {
         guard let doc = splitVC.pdf.pdfView.document else { return }
@@ -271,12 +285,19 @@ extension DocumentWindowController: NSToolbarDelegate {
         // The sidebar item sits BEFORE .sidebarTrackingSeparator → AppKit places it in the sidebar's
         // titlebar area (leading, before the title), exactly as Preview/Finder/Mail do. The title and
         // the rest of the controls render after the separator (the content area).
-        [ItemID.sidebar, .sidebarTrackingSeparator, .flexibleSpace, ItemID.zoom, ItemID.rotate, .space,
-         ItemID.markup, ItemID.text, .space, ItemID.info, ItemID.share, ItemID.search, ItemID.aiToggle]
+        // Preview-style: controls LEFT-aligned after the title, then a flexible gap, then search + AI on the
+        // right. When the window narrows, the trailing controls collapse into the standard » overflow menu
+        // (instead of being pushed off / the zoom group self-collapsing). The zoom trio is adjacent (one pill);
+        // a `.space` separates it from rotate.
+        [ItemID.sidebar, .sidebarTrackingSeparator,
+         ItemID.zoomOut, ItemID.zoomActual, ItemID.zoomIn, .space, ItemID.rotate, .space,
+         ItemID.markup, ItemID.text, .space, ItemID.info, ItemID.share,
+         .flexibleSpace, ItemID.search, ItemID.aiToggle]
     }
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [ItemID.sidebar, .sidebarTrackingSeparator, ItemID.zoom, ItemID.rotate, ItemID.markup, ItemID.text,
-         ItemID.info, ItemID.share, ItemID.search, ItemID.aiToggle, .flexibleSpace, .space]
+        [ItemID.sidebar, .sidebarTrackingSeparator, ItemID.zoomOut, ItemID.zoomActual, ItemID.zoomIn,
+         ItemID.rotate, ItemID.markup, ItemID.text, ItemID.info, ItemID.share, ItemID.search, ItemID.aiToggle,
+         .flexibleSpace, .space]
     }
 
     func toolbar(_ toolbar: NSToolbar,
@@ -284,7 +305,12 @@ extension DocumentWindowController: NSToolbarDelegate {
                  willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
         switch id {
         case ItemID.sidebar:  return makeSidebarItem()
-        case ItemID.zoom:     return makeZoomGroup()
+        case ItemID.zoomOut:    return makeZoomButton(ItemID.zoomOut, "minus.magnifyingglass", "minus",
+                                                      "Zoom Out", #selector(zoomOut(_:)))
+        case ItemID.zoomActual: return makeZoomButton(ItemID.zoomActual, "1.magnifyingglass", "magnifyingglass",
+                                                      "Actual Size", #selector(actualSize(_:)))
+        case ItemID.zoomIn:     return makeZoomButton(ItemID.zoomIn, "plus.magnifyingglass", "plus",
+                                                      "Zoom In", #selector(zoomIn(_:)))
         case ItemID.rotate:   return makeButton(ItemID.rotate, "rotate.left", "arrow.counterclockwise",
                                                 "Rotate Left", #selector(rotateDocument(_:)))
         case ItemID.markup:      return makeMarkupItem()
@@ -326,38 +352,32 @@ extension DocumentWindowController: NSToolbarDelegate {
         return item
     }
 
-    // Zoom: a single glass pill with three momentary segments (out · actual size · in). The segmented
-    // control IS the control — the segments are the hit targets, not buttons layered on top.
-    private func makeZoomGroup() -> NSToolbarItemGroup {
-        let images = [
-            safeSymbol("minus.magnifyingglass", "minus", "Zoom Out"),
-            safeSymbol("1.magnifyingglass", "magnifyingglass", "Actual Size"),
-            safeSymbol("plus.magnifyingglass", "plus", "Zoom In"),
-        ]
-        let group = NSToolbarItemGroup(itemIdentifier: ItemID.zoom,
-                                       images: images,
-                                       selectionMode: .momentary,
-                                       labels: ["Zoom Out", "Actual Size", "Zoom In"],
-                                       target: self,
-                                       action: #selector(zoomSegment(_:)))
-        group.label = "Zoom"
-        // We drive per-segment enabled state ourselves (actual-size off at 100%, out/in off at limits),
-        // so turn off autovalidation which would otherwise keep every segment enabled.
-        group.subitems.forEach { $0.autovalidates = false }
-        zoomGroup = group
+    // Zoom: three separate bordered buttons (out · actual size · in). Adjacent bordered items auto-group onto
+    // one glass pill (Preview's −/1/+ look), but as SEPARATE items they overflow cleanly into the » menu when
+    // the window narrows — an NSToolbarItemGroup instead collapses into a janky chevron-pulldown. We drive each
+    // button's enabled state ourselves, so autovalidation is off (it would otherwise keep them all enabled).
+    private func makeZoomButton(_ id: NSToolbarItem.Identifier, _ symbol: String, _ fallback: String,
+                                _ label: String, _ action: Selector) -> NSToolbarItem {
+        let item = makeButton(id, symbol, fallback, label, action)
+        item.autovalidates = false
+        switch id {
+        case ItemID.zoomOut:    zoomOutItem = item
+        case ItemID.zoomActual: zoomActualItem = item
+        case ItemID.zoomIn:     zoomInItem = item
+        default: break
+        }
         updateZoomSegments()
-        return group
+        return item
     }
 
-    /// Enable/disable the zoom segments to mirror Preview: actual-size off at 100%, zoom out off at the
+    /// Enable/disable the zoom buttons to mirror Preview: actual-size off at 100%, zoom out off at the
     /// minimum scale, zoom in off at the maximum scale.
     private func updateZoomSegments() {
-        guard let subitems = zoomGroup?.subitems, subitems.count == 3 else { return }
         let view = splitVC.pdf.pdfView
         let scale = view.scaleFactor
-        subitems[0].isEnabled = scale > view.minScaleFactor + 0.001    // zoom out
-        subitems[1].isEnabled = abs(scale - 1.0) > 0.001               // actual size
-        subitems[2].isEnabled = scale < view.maxScaleFactor - 0.001    // zoom in
+        zoomOutItem?.isEnabled    = scale > view.minScaleFactor + 0.001
+        zoomActualItem?.isEnabled = abs(scale - 1.0) > 0.001
+        zoomInItem?.isEnabled     = scale < view.maxScaleFactor - 0.001
     }
 
     // Single glass button: system-rendered (image + action + isBordered). AppKit auto-groups adjacent
