@@ -20,15 +20,15 @@ enum FoundationCheck {
 
     private static let keychainBase: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
-        kSecAttrService as String: "com.padafa.app.selftest",
+        kSecAttrService as String: "com.openview.app.selftest",
         kSecAttrAccount as String: "stage1",
     ]
-    private static let keychainExpected = Data("padafa-stage1-probe".utf8)
+    private static let keychainExpected = Data("openview-stage1-probe".utf8)
 
     @discardableResult
     static func runKeychainCheck() -> Bool {
         let (ok, detail) = keychainCheck()
-        NSLog("[Padafa] Keychain self-test → %@ (%@)", ok ? "PASS" : "FAIL", detail)
+        NSLog("[Openview] Keychain self-test → %@ (%@)", ok ? "PASS" : "FAIL", detail)
         return ok
     }
 
@@ -76,9 +76,9 @@ enum FoundationCheck {
 
     static func runInteractive() {
         let (kOK, kDetail) = keychainCheck()
-        NSLog("[Padafa] Keychain → %@ (%@)", kOK ? "PASS" : "FAIL", kDetail)
+        NSLog("[Openview] Keychain → %@ (%@)", kOK ? "PASS" : "FAIL", kDetail)
         let (eOK, eDetail) = runEmbeddingProbe()
-        NSLog("[Padafa] Embedding → %@ (%@)", eOK ? "PASS" : "FAIL", eDetail)
+        NSLog("[Openview] Embedding → %@ (%@)", eOK ? "PASS" : "FAIL", eDetail)
         let alert = NSAlert()
         alert.messageText = "Foundation Self-Test"
         alert.informativeText = """

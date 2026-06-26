@@ -13,7 +13,7 @@ final class ThumbnailListViewController: NSViewController {
     private let scrollView = NSScrollView()
     private let collectionView = NSCollectionView()
     private let thumbCache = NSCache<NSNumber, NSImage>()          // bounded — won't grow without limit on huge PDFs
-    private let thumbQueue = DispatchQueue(label: "com.padafa.thumbnails", qos: .userInitiated)  // serial: never hit PDFDocument concurrently
+    private let thumbQueue = DispatchQueue(label: "com.openview.thumbnails", qos: .userInitiated)  // serial: never hit PDFDocument concurrently
     private let thumbSize = NSSize(width: 140, height: 181)        // larger thumbnails (Preview-like, bigger)
 
     // Generation token: bumped whenever the document is attached / swapped / cleared (e.g. drive eject →

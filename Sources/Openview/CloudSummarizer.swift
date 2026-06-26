@@ -23,7 +23,7 @@ enum CloudSummarizer {
 
     /// Stream the cloud summary, yielding the CUMULATIVE text so far (the panel just SETS the answer body to
     /// the latest value, like every other streaming path). The key/model come from `CloudBackend.current()`
-    /// (env `PADAFA_ANTHROPIC_KEY` → Keychain); the caller ensures a key exists first. Throws a distinct
+    /// (env `OPENVIEW_ANTHROPIC_KEY` → Keychain); the caller ensures a key exists first. Throws a distinct
     /// ``SummarizationError`` per failure mode (nothing swallowed).
     static func summarizeStream(_ text: String) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in

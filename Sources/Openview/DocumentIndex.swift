@@ -42,10 +42,10 @@ enum DocumentIndex {
     //     OVER-REJECTS casual questions on other genres — a résumé scored on-topic "who is X" / "current role"
     //     at 0.80–0.85 → wrongly turned away. Default lowered to ANSWER-FIRST single cutoff 0.80 (user choice);
     //     off-topic that slips the gate is caught by the LLM ("answer only from the passages"). 0.85 = the
-    //     stricter trust-first point, available via PADAFA_GATE.
+    //     stricter trust-first point, available via OPENVIEW_GATE.
     //   • NLEmbedding (nle-v1, the fallback): scores overlap hard (off-topic can out-score on-topic; doc size
     //     inflates both) → two-threshold + BM25 anchor (0.35/0.42) → on 95% / off 60% (its ceiling).
-    // Override at runtime with `PADAFA_GATE` / `PADAFA_GATE_HIGH` (apply to whichever embedder is active).
+    // Override at runtime with `OPENVIEW_GATE` / `OPENVIEW_GATE_HIGH` (apply to whichever embedder is active).
 
     // MARK: – Persisted format
 
@@ -160,14 +160,14 @@ enum DocumentIndex {
         let chunks = s.fusedTopIdx.map { Chunk(text: windows[$0].text, page: windows[$0].page) }
 
         // Behavior-neutral retrieval log (ranking diagnostics only — no gate decision). Verbose per-chunk dump
-        // under PADAFA_RETRIEVE_DEBUG=1.
+        // under OPENVIEW_RETRIEVE_DEBUG=1.
         let scores = s.fusedTopIdx.map { String(format: "%.3f", max(0, s.cosine[$0])) }.joined(separator: ",")
         let pages = s.fusedTopIdx.map { String(windows[$0].page) }.joined(separator: ",")
         let semState = s.semanticAvailable ? "cosine"
             : (provider.isAvailable ? "bm25-only" : "bm25-only(NLEmbedding-unavailable)")
         NSLog("[retrieve] top1=%.3f top2=%.3f kmean=%.3f bm25=%d k=%d sem=%@ scores=[%@] pages=[%@] q=%@",
               s.top1, s.top2, s.topKMean, s.bm25Hits, chunks.count, semState, scores, pages, question)
-        if ProcessInfo.processInfo.environment["PADAFA_RETRIEVE_DEBUG"] == "1" {
+        if ProcessInfo.processInfo.environment["OPENVIEW_RETRIEVE_DEBUG"] == "1" {
             for (n, idx) in s.fusedTopIdx.enumerated() {
                 NSLog("[retrieve]   #%d p%d cos=%.3f: %@", n + 1, windows[idx].page,
                       max(0, s.cosine[idx]), String(windows[idx].text.prefix(160)))
@@ -271,7 +271,7 @@ enum DocumentIndex {
     }
 
     private static func err(_ message: String) -> NSError {
-        NSError(domain: "Padafa.Index", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+        NSError(domain: "Openview.Index", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
     }
 }
 

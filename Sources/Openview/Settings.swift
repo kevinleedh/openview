@@ -9,11 +9,11 @@ import Foundation
 /// direction — Apple on-device, no NLI grounding). The NLI code is untouched; only the call is branched.
 enum Settings {
     private static let defaults = UserDefaults.standard
-    private static let verifyEnabledKey = "padafa.qa.verifyEnabled"
-    private static let selectedModelKey = "padafa.qa.selectedModel"
-    private static let selectedModelNameKey = "padafa.qa.selectedModelName"
-    private static let selectedModelProviderKey = "padafa.qa.selectedModelProvider"
-    private static let ollamaURLKey = "padafa.ollama.url"
+    private static let verifyEnabledKey = "openview.qa.verifyEnabled"
+    private static let selectedModelKey = "openview.qa.selectedModel"
+    private static let selectedModelNameKey = "openview.qa.selectedModelName"
+    private static let selectedModelProviderKey = "openview.qa.selectedModelProvider"
+    private static let ollamaURLKey = "openview.ollama.url"
 
     /// Machine (NLI) verification for Q&A. `false` (default) → page sources, no grounding. `true` → the
     /// per-sentence NLI grounded path (blue verified chips, drop/not-found). INDEPENDENT of the model:
@@ -46,7 +46,7 @@ enum Settings {
         set { defaults.set(newValue, forKey: selectedModelProviderKey) }
     }
 
-    /// Base URL of the local Ollama server (the model runs in Ollama's process, not Padafa's). Default is the
+    /// Base URL of the local Ollama server (the model runs in Ollama's process, not Openview's). Default is the
     /// standard local port; editable in Settings for a remote/relocated Ollama.
     static var ollamaURL: String {
         get { defaults.string(forKey: ollamaURLKey) ?? "http://localhost:11434" }

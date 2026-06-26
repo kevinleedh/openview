@@ -58,7 +58,7 @@ enum ModelCatalog {
 
     /// Live local model list via `GET {ollamaURL}/api/tags`. Returns `[]` when Ollama isn't reachable (not
     /// running / wrong address) — so local models simply don't appear, never a crash. Each model's `name` is
-    /// the id (e.g. `"gemma3:1b"`). The model runs in OLLAMA's process — Padafa only makes HTTP calls, so this
+    /// the id (e.g. `"gemma3:1b"`). The model runs in OLLAMA's process — Openview only makes HTTP calls, so this
     /// adds no model memory to the app (the 8GB-safe path; no MLX-direct OOM).
     static func fetchOllama() async -> [ModelOption] {
         let base = Settings.ollamaURL.trimmingCharacters(in: .whitespaces)

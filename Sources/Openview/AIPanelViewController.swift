@@ -691,7 +691,7 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
                 out.append(NSAttributedString(string: label, attributes: [
                     .font: NSFont.systemFont(ofSize: 11, weight: .medium),
                     .foregroundColor: NSColor.systemBlue,
-                    .link: URL(string: "padafa-cite:\(turnIndex):\(si)") as Any,
+                    .link: URL(string: "openview-cite:\(turnIndex):\(si)") as Any,
                 ]))
             }
         }
@@ -729,8 +729,8 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
 
     func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
         let raw = (link as? URL)?.absoluteString ?? (link as? String) ?? ""
-        guard raw.hasPrefix("padafa-cite:") else { return false }
-        let parts = raw.dropFirst("padafa-cite:".count).split(separator: ":")
+        guard raw.hasPrefix("openview-cite:") else { return false }
+        let parts = raw.dropFirst("openview-cite:".count).split(separator: ":")
         guard parts.count == 2, let ti = Int(parts[0]), let si = Int(parts[1]),
               turns.indices.contains(ti), turns[ti].indices.contains(si) else { return false }
         // Same D3 filter as the chip: only coordinate-bearing citations are selectable.

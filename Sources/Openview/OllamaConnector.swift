@@ -112,6 +112,6 @@ final class OllamaConnector {
     }
 
     private func err(_ message: String) -> NSError {
-        NSError(domain: "Padafa.OllamaConnector", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+        NSError(domain: "Openview.OllamaConnector", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
     }
 }

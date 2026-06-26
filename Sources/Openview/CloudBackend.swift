@@ -15,24 +15,24 @@ import Security
 /// (@MainActor ObservableObject) — that is SwiftUI-coupled and is the 4b model-selector pass, NOT ported here.
 enum CloudBackend {
 
-    /// 4a default model. Overridable via PADAFA_ANTHROPIC_MODEL for verification; 4b's selector replaces this.
+    /// 4a default model. Overridable via OPENVIEW_ANTHROPIC_MODEL for verification; 4b's selector replaces this.
     static let defaultModel = "claude-opus-4-8"
 
     /// The backend dict passed to SidecarBridge.answer(backend:) — `{provider, key, model}` matching
     /// cloudllm.py — or nil to use the LOCAL MLX path (no key configured). Key source (4a, no UI):
-    /// the PADAFA_ANTHROPIC_KEY env var (temporary injection for functional verification) takes
+    /// the OPENVIEW_ANTHROPIC_KEY env var (temporary injection for functional verification) takes
     /// precedence, else the Keychain item that 4b's settings UI will populate. NEVER hardcoded.
     static func current() -> [String: String]? {
         let env = ProcessInfo.processInfo.environment
-        let envKey = env["PADAFA_ANTHROPIC_KEY"].flatMap { $0.isEmpty ? nil : $0 }
+        let envKey = env["OPENVIEW_ANTHROPIC_KEY"].flatMap { $0.isEmpty ? nil : $0 }
         guard let key = envKey ?? Keychain.read(account: "anthropic"), !key.isEmpty else {
             return nil                                  // no key → local MLX (Stage 3 default, unchanged)
         }
-        let model = env["PADAFA_ANTHROPIC_MODEL"].flatMap { $0.isEmpty ? nil : $0 } ?? defaultModel
+        let model = env["OPENVIEW_ANTHROPIC_MODEL"].flatMap { $0.isEmpty ? nil : $0 } ?? defaultModel
         return ["provider": "anthropic", "key": key, "model": model]
     }
 
-    /// The resolved cloud API key (env `PADAFA_ANTHROPIC_KEY` → Keychain), or nil. Used by the F8 model
+    /// The resolved cloud API key (env `OPENVIEW_ANTHROPIC_KEY` → Keychain), or nil. Used by the F8 model
     /// selector to supply the key to the live `/v1/models` fetch and to Swift-direct cloud Q&A. (The model
     /// LIST UI uses `Keychain.exists` for its presence check to avoid the consent prompt; this resolves the
     /// actual secret only when a cloud call is genuinely being made.)
@@ -40,8 +40,8 @@ enum CloudBackend {
         let env = ProcessInfo.processInfo.environment
         // Test override: force the "no cloud key" state (Apple-only model list) WITHOUT touching the user's
         // Keychain — used to verify the dynamic list; harmless in production (env var absent).
-        if env["PADAFA_FORCE_NO_KEY"] == "1" { return nil }
-        if let envKey = env["PADAFA_ANTHROPIC_KEY"].flatMap({ $0.isEmpty ? nil : $0 }) { return envKey }
+        if env["OPENVIEW_FORCE_NO_KEY"] == "1" { return nil }
+        if let envKey = env["OPENVIEW_ANTHROPIC_KEY"].flatMap({ $0.isEmpty ? nil : $0 }) { return envKey }
         let stored = Keychain.read(account: "anthropic")
         return (stored?.isEmpty == false) ? stored : nil
     }
@@ -51,8 +51,8 @@ enum CloudBackend {
     /// so the status agrees with whether the model list will offer cloud models.
     static func hasKey() -> Bool {
         let env = ProcessInfo.processInfo.environment
-        if env["PADAFA_FORCE_NO_KEY"] == "1" { return false }
-        if (env["PADAFA_ANTHROPIC_KEY"].flatMap { $0.isEmpty ? nil : $0 }) != nil { return true }
+        if env["OPENVIEW_FORCE_NO_KEY"] == "1" { return false }
+        if (env["OPENVIEW_ANTHROPIC_KEY"].flatMap { $0.isEmpty ? nil : $0 }) != nil { return true }
         return Keychain.exists(account: "anthropic")
     }
 
@@ -67,7 +67,7 @@ enum CloudBackend {
 /// build. File-based (login) keychain so an ad-hoc/unsigned app can read back its own items without the
 /// keychain-access-groups entitlement the data-protection keychain requires.
 enum Keychain {
-    private static let service = "com.padafa.apikeys"
+    private static let service = "com.openview.apikeys"
 
     /// Upsert (or delete when empty). Returns nil on success, else a human-readable error.
     @discardableResult

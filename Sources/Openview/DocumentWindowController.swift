@@ -49,7 +49,7 @@ final class DocumentWindowController: NSWindowController {
             backing: .buffered,
             defer: false)
         window.minSize = NSSize(width: 760, height: 520)
-        window.title = "Padafa"
+        window.title = "Openview"
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
         // Opt OUT of macOS window state restoration: it reopens EVERY window that was open at quit, which
@@ -63,13 +63,13 @@ final class DocumentWindowController: NSWindowController {
         splitVC.pdf.delegate = self
         splitVC.sidebar.onDone = { [weak self] in self?.endSearch() }   // search-results "Done" → restore panel
 
-        let toolbar = NSToolbar(identifier: "PadafaViewingToolbar")
+        let toolbar = NSToolbar(identifier: "OpenviewViewingToolbar")
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false
         window.toolbar = toolbar
 
-        let autosaveName = "PadafaDocumentWindow"
+        let autosaveName = "OpenviewDocumentWindow"
         // Only a *visible* sibling window counts as occupying the saved frame — otherwise a second open
         // would cascade off a closed window's stale name. (close() frees the window; the check must look
         // at what's actually on screen, not every window AppKit still tracks.)
@@ -97,7 +97,7 @@ final class DocumentWindowController: NSWindowController {
         // reflects highlighter mode; transient citation highlights are stripped just before serialization.
         splitVC.pdf.onMarkupChange = { [weak self] in (self?.document as? NSDocument)?.updateChangeCount(.changeDone) }
         splitVC.pdf.onToolChange = { [weak self] tool in self?.updateToolButtons(tool) }
-        (self.document as? PadafaDocument)?.prepareForSave = { [weak self] in self?.splitVC.pdf.prepareForSave() }
+        (self.document as? OpenviewDocument)?.prepareForSave = { [weak self] in self?.splitVC.pdf.prepareForSave() }
         // Prefer the NSDocument's fileURL. A PDF on a removable/external volume is loaded via
         // PDFDocument(data:) (the SIGBUS crash-fix), so its `documentURL` is NIL — relying on that would skip
         // engine creation and leave ALL AI features (Q&A + F8 summary) dead for every external-drive PDF.

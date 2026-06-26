@@ -23,9 +23,9 @@ final class E5CoreMLProvider: EmbeddingProvider {
     // document were wrongly turned away. Default lowered to 0.80 (ANSWER-FIRST — user choice): document
     // questions get answered even when phrased casually; an occasional off-topic question passes the gate and
     // the LLM (instructed to answer ONLY from the passages) replies "not in this document" as the second line
-    // of defense. Override with PADAFA_GATE (raise = stricter off-topic rejection; 0.85 = the trust-first point).
-    let gateLow = gateOverride("PADAFA_GATE", default: 0.80)
-    let gateHigh = gateOverride("PADAFA_GATE_HIGH", default: 0.80)
+    // of defense. Override with OPENVIEW_GATE (raise = stricter off-topic rejection; 0.85 = the trust-first point).
+    let gateLow = gateOverride("OPENVIEW_GATE", default: 0.80)
+    let gateHigh = gateOverride("OPENVIEW_GATE_HIGH", default: 0.80)
 
     private let model: MLModel
     private let tokenizer: WordPieceTokenizer
@@ -55,10 +55,10 @@ final class E5CoreMLProvider: EmbeddingProvider {
     // MARK: – Core ML model loading (compile the .mlpackage once, cache the compiled .mlmodelc)
 
     /// Find the bundled artifacts (the app copies them into Contents/Resources at build). For the headless
-    /// calibration harness, `PADAFA_E5_DIR` points straight at `tools/artifacts`.
+    /// calibration harness, `OPENVIEW_E5_DIR` points straight at `tools/artifacts`.
     private static func artifactsDir() -> URL? {
         let fm = FileManager.default
-        if let env = ProcessInfo.processInfo.environment["PADAFA_E5_DIR"],
+        if let env = ProcessInfo.processInfo.environment["OPENVIEW_E5_DIR"],
            fm.fileExists(atPath: (env as NSString).appendingPathComponent("e5-vocab.txt")) {
             return URL(fileURLWithPath: env)
         }
@@ -79,7 +79,7 @@ final class E5CoreMLProvider: EmbeddingProvider {
         // Compiling the .mlpackage is slow; cache the compiled .mlmodelc (keyed by embedder id so a model
         // change invalidates it) and reuse across launches.
         let cacheDir = (try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true))?
-            .appendingPathComponent("Padafa/models", isDirectory: true)
+            .appendingPathComponent("Openview/models", isDirectory: true)
         let cached = cacheDir?.appendingPathComponent("e5s2-v1.mlmodelc")
         if let cached, fm.fileExists(atPath: cached.path), let m = try? MLModel(contentsOf: cached, configuration: cfg) {
             return m

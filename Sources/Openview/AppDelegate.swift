@@ -2,8 +2,8 @@ import AppKit
 
 /// App lifecycle for the document shell. We deliberately do NOT implement `application(_:open:)` — with
 /// the PDF type declared in Info.plist (NSDocumentClass), the shared `NSDocumentController` opens Finder
-/// double-clicks / 'Open With → Padafa' automatically. We add only a headless launch convenience
-/// (`open Padafa.app --args <file.pdf>`) and a Preview-style "present the open panel when launched with
+/// double-clicks / 'Open With → Openview' automatically. We add only a headless launch convenience
+/// (`open Openview.app --args <file.pdf>`) and a Preview-style "present the open panel when launched with
 /// nothing" so the user never faces a blank window — plus quit/volume hygiene.
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
@@ -22,16 +22,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // cached `Embeddings.current` instance later.
         DispatchQueue.global(qos: .utility).async { Embeddings.prewarm() }
 
-        // TEMPORARY (F8 Stage-1 verification): when launched with PADAFA_FM_SELFTEST=1, auto-run the
+        // TEMPORARY (F8 Stage-1 verification): when launched with OPENVIEW_FM_SELFTEST=1, auto-run the
         // Foundation Models summarize probe so it can be verified headlessly (logs the result to the
         // console). The work is detached, so it logs even while the empty-launch Open panel is up.
         // Stage 3 removes this along with the Debug menu probe.
-        if ProcessInfo.processInfo.environment["PADAFA_FM_SELFTEST"] == "1" {
+        if ProcessInfo.processInfo.environment["OPENVIEW_FM_SELFTEST"] == "1" {
             runSummarizeSelfTest(nil)
         }
         // TEMPORARY (F8 Stage-2b verification): show the cloud API-key input prompt on demand, so it can be
         // screenshotted WITHOUT removing any real Keychain key. Replaced by the real settings UI (4b).
-        if ProcessInfo.processInfo.environment["PADAFA_KEYPROMPT_DEBUG"] == "1" {
+        if ProcessInfo.processInfo.environment["OPENVIEW_KEYPROMPT_DEBUG"] == "1" {
             DispatchQueue.main.async {
                 _ = APIKeyPrompt.promptAndSave(message:
                     "This document is large and needs more powerful processing. Enter an API key to summarize it with a cloud model.")
@@ -67,10 +67,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func warnIfRunningFromRemovableVolume() {
         let path = Bundle.main.bundleURL.path
         guard path.hasPrefix("/Volumes/") else { return }
-        NSLog("[Padafa] WARNING: running from %@ (a removable volume). If it unmounts the app will crash (SIGBUS).", path)
+        NSLog("[Openview] WARNING: running from %@ (a removable volume). If it unmounts the app will crash (SIGBUS).", path)
         let alert = NSAlert()
         alert.messageText = "Running from a removable drive"
-        alert.informativeText = "Padafa is running from:\n\(path)\n\nIf that drive disconnects, the app will crash. Reinstall to your internal disk by running ./make_app.sh, then launch from ~/Applications."
+        alert.informativeText = "Openview is running from:\n\(path)\n\nIf that drive disconnects, the app will crash. Reinstall to your internal disk by running ./make_app.sh, then launch from ~/Applications."
         alert.alertStyle = .warning
         alert.runModal()
     }
@@ -101,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
             guard FileManager.default.fileExists(atPath: url.path) else { continue }
             NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, error in
-                if let error { NSLog("[Padafa] open failed for \(path): \(error.localizedDescription)") }
+                if let error { NSLog("[Openview] open failed for \(path): \(error.localizedDescription)") }
             }
             return true   // single document — open only the first valid file
         }
@@ -153,7 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let volURL = note.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL else { return }
         let volPath = volURL.standardizedFileURL.path
         var hit = false
-        for case let doc as PadafaDocument in NSDocumentController.shared.documents {
+        for case let doc as OpenviewDocument in NSDocumentController.shared.documents {
             guard let docPath = doc.fileURL?.standardizedFileURL.path,
                   docPath == volPath || docPath.hasPrefix(volPath + "/") else { continue }
             hit = true
@@ -187,25 +187,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         such as summarizing, rewriting, and extracting short pieces of text rather than open-ended chat.
         """
         guard #available(macOS 26, *) else {
-            NSLog("[Padafa][F8] Foundation Models unavailable: macOS < 26")
+            NSLog("[Openview][F8] Foundation Models unavailable: macOS < 26")
             Self.presentSummary(title: "Foundation Models unavailable",
                                 body: SummarizationAvailability.unsupportedOS.message)
             return
         }
         let avail = SummarizationService.availability()
-        NSLog("[Padafa][F8] availability = \(avail)")
+        NSLog("[Openview][F8] availability = \(avail)")
         // Detached so model inference runs OFF the main thread (no UI beachball) and still completes/logs
         // even if a modal (e.g. the empty-launch Open panel) is up — `respond` is nonisolated(nonsending).
         Task.detached {
             do {
                 let summary = try await SummarizationService.summarize(sample)
-                NSLog("[Padafa][F8] summary OK (%d chars): %@", summary.count, summary)
+                NSLog("[Openview][F8] summary OK (%d chars): %@", summary.count, summary)
                 await MainActor.run {
                     Self.presentSummary(title: "Foundation Models summary", body: summary)
                 }
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                NSLog("[Padafa][F8] summary ERROR: %@", msg)
+                NSLog("[Openview][F8] summary ERROR: %@", msg)
                 await MainActor.run {
                     Self.presentSummary(title: "Foundation Models error", body: msg)
                 }

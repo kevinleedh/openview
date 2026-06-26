@@ -2,12 +2,12 @@ import AppKit
 import PDFKit
 
 /// The PDF as the document model — Preview's exact shape (`PDFDocument` wrapped in an `NSDocument`).
-/// `@objc(PadafaDocument)` exposes the unqualified Obj-C name referenced by Info.plist's NSDocumentClass.
+/// `@objc(OpenviewDocument)` exposes the unqualified Obj-C name referenced by Info.plist's NSDocumentClass.
 /// Supports text-markup editing: highlight/underline/strikethrough annotations are added to `pdfDocument`
 /// and serialized back into the PDF on ⌘S (`data(ofType:)` → `dataRepresentation()`), so Preview and other
 /// viewers see them too. Explicit-save only (no autosave-in-place of the user's source file).
-@objc(PadafaDocument)
-final class PadafaDocument: NSDocument {
+@objc(OpenviewDocument)
+final class OpenviewDocument: NSDocument {
 
     private(set) var pdfDocument: PDFDocument?
 
@@ -32,7 +32,7 @@ final class PadafaDocument: NSDocument {
             doc = PDFDocument(url: url)
         }
         guard let doc else {
-            throw NSError(domain: "Padafa", code: 1, userInfo: [
+            throw NSError(domain: "Openview", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "This document could not be opened.",
                 NSLocalizedRecoverySuggestionErrorKey: "The file may be corrupt or not a valid PDF."
             ])
@@ -62,7 +62,7 @@ final class PadafaDocument: NSDocument {
     override func data(ofType typeName: String) throws -> Data {
         prepareForSave?()                                       // drop transient (citation) annotations first
         guard let data = pdfDocument?.dataRepresentation() else {
-            throw NSError(domain: "Padafa", code: NSFileWriteUnknownError, userInfo: [
+            throw NSError(domain: "Openview", code: NSFileWriteUnknownError, userInfo: [
                 NSLocalizedDescriptionKey: "The document could not be saved."
             ])
         }

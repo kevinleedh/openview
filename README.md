@@ -1,8 +1,8 @@
-# Padafa — Mac PDF AI viewer (AppKit rebuild)
+# Openview — Mac PDF AI viewer (AppKit rebuild)
 
-Pure-AppKit, `NSDocument`-based rewrite of Padafa (migrating off SwiftUI). The product, principles,
+Pure-AppKit, `NSDocument`-based rewrite of Openview (migrating off SwiftUI). The product, principles,
 and feature set are unchanged — only the UI framework. See the spec docs in [`files/`](files/):
-`CLAUDE.md` (constitution), `prd_padafa_dev.md` (features), `spec_core_loop_ux.md` (core loop),
+`CLAUDE.md` (constitution), `prd_openview_dev.md` (features), `spec_core_loop_ux.md` (core loop),
 `migration_appkit.md` (this rewrite's plan), `open_decisions.md` (decisions).
 
 ## Status — Stage 1 (minimal NSDocument + PDFView shell)
@@ -24,18 +24,18 @@ Foundation checks (the migration doc's "known re-setup risks") — all verified 
 ## Layout
 
 ```
-Package.swift            SwiftPM (macOS 14 floor); PadafaKit lib + Padafa app target
-Info.plist               CFBundleDocumentTypes → PDF, bound to PadafaDocument
-make_app.sh              swift build → assemble Padafa.app → ad-hoc sign → lsregister
+Package.swift            SwiftPM (macOS 14 floor); OpenviewKit lib + Openview app target
+Info.plist               CFBundleDocumentTypes → PDF, bound to OpenviewDocument
+make_app.sh              swift build → assemble Openview.app → ad-hoc sign → lsregister
 Sources/
-  PadafaKit/             ported as-is (UI-independent engine logic)
+  OpenviewKit/             ported as-is (UI-independent engine logic)
     CoordinateAdapter.swift   Docling/PyMuPDF bbox → PDFKit page-point (the y-flip; IoU 0.931)
     SidecarClient.swift       Swift ↔ Python sidecar, JSON-lines over stdin/stdout
-  Padafa/                the AppKit app shell (Stage 1)
+  Openview/                the AppKit app shell (Stage 1)
     main.swift                NSApplication bootstrap (programmatic, no nib)
     MainMenu.swift            File ▸ Open… etc., wired through the responder chain
     AppDelegate.swift         open flow + Preview-style empty-launch panel
-    PadafaDocument.swift      NSDocument wrapping PDFDocument (read-only viewer)
+    OpenviewDocument.swift      NSDocument wrapping PDFDocument (read-only viewer)
     DocumentWindowController.swift   window + frame autosave (single doc, no tabs)
     PDFViewController.swift   hosts PDFView directly (.singlePageContinuous, autoScales)
     FoundationCheck.swift     Stage-1 Keychain + sidecar probes
@@ -48,16 +48,16 @@ PDF Samples/             test PDFs
 
 ```bash
 ./make_app.sh                                  # build + bundle + sign + register (release)
-open Padafa.app --args "$PWD/PDF Samples/1706.03762v7.pdf"   # open a specific PDF
-open Padafa.app                                # launch → Preview-style open panel
+open Openview.app --args "$PWD/PDF Samples/1706.03762v7.pdf"   # open a specific PDF
+open Openview.app                                # launch → Preview-style open panel
 ```
 
-- `⌘O` opens a PDF; Finder **Open With → Padafa** works (Launch Services registered). Closing the
+- `⌘O` opens a PDF; Finder **Open With → Openview** works (Launch Services registered). Closing the
   PDF (`⌘W`) then clicking the Dock icon re-presents the open panel (never a dead-end blank state).
 - **Debug ▸ Run Foundation Self-Test** (`⌘⇧T`) runs the Keychain persistence check and the sidecar
   probe. The sidecar probe sends a real `warmup` (loads the ML models, ~20–30s) so a PASS proves the
   whole stack runs — not just that the process launches.
-- Sidecar interpreter defaults to the miniforge base Python; override with `PADAFA_PYTHON=/path/to/python3`.
+- Sidecar interpreter defaults to the miniforge base Python; override with `OPENVIEW_PYTHON=/path/to/python3`.
 
 ## The BLOCKING verification (do this on the trackpad)
 
@@ -78,7 +78,7 @@ Per `files/migration_appkit.md` Stage 1 — open a PDF and scroll with the **tra
 - **Stage 3** ✅ — AI panel reconnected to the ported grounding engine (`SidecarBridge` + `DocumentEngine`):
   ingest on open → ask → grounded answer with inline `[p.N]` citation chips → click → jump + highlight (F4);
   honest not-found. **Local MLX backend (no API key).** First answer is slow (~30–40s, cold model load),
-  then ~4s; the per-document index is cached in `~/Library/Application Support/Padafa/index/`.
+  then ~4s; the per-document index is cached in `~/Library/Application Support/Openview/index/`.
 
 ### Not yet built (later stages, per the spec)
 Stage 4 — model selector + settings (7 providers, dynamic `/models`, Keychain) to supply the cloud

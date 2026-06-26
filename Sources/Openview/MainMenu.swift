@@ -34,14 +34,14 @@ enum MainMenu {
     }
 
     private static func appMenuItem() -> NSMenuItem {
-        submenu("Padafa") { m in
-            add(m, "About Padafa", #selector(NSApplication.orderFrontStandardAboutPanel(_:)))
+        submenu("Openview") { m in
+            add(m, "About Openview", #selector(NSApplication.orderFrontStandardAboutPanel(_:)))
             m.addItem(.separator())
-            add(m, "Hide Padafa", #selector(NSApplication.hide(_:)), "h")
+            add(m, "Hide Openview", #selector(NSApplication.hide(_:)), "h")
             add(m, "Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option])
             add(m, "Show All", #selector(NSApplication.unhideAllApplications(_:)))
             m.addItem(.separator())
-            add(m, "Quit Padafa", #selector(NSApplication.terminate(_:)), "q")
+            add(m, "Quit Openview", #selector(NSApplication.terminate(_:)), "q")
         }
     }
 

@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
-# Assemble a minimal Padafa.app bundle (no Xcode) so native ⌘O menus, Dock identity, and
+# Assemble a minimal Openview.app bundle (no Xcode) so native ⌘O menus, Dock identity, and
 # Launch Services PDF registration work. Release build by default for a fair native-scroll test
 # (override with CONFIG=debug). Mirrors the proven prior-build script (files/migration_appkit.md).
 #
 # IMPORTANT (crash fix): the finished app is INSTALLED TO AND RUN FROM the internal disk
-# (~/Applications by default, override with PADAFA_INSTALL_DIR). Running the executable from the
+# (~/Applications by default, override with OPENVIEW_INSTALL_DIR). Running the executable from the
 # external SSD caused hard SIGBUS crashes: when the volume momentarily unmounts/sleeps, the
 # memory-mapped Mach-O __TEXT pages lose their backing vnode and the next instruction fetch is a
 # bus error. The source tree and PDFs may stay on the SSD; only the running binary must not.
 set -euo pipefail
 cd "$(dirname "$0")"
 CONFIG="${CONFIG:-release}"
-INSTALL_DIR="${PADAFA_INSTALL_DIR:-$HOME/Applications}"
-APP_NAME="Padafa.app"
+INSTALL_DIR="${OPENVIEW_INSTALL_DIR:-$HOME/Applications}"
+APP_NAME="Openview.app"
 
 swift build -c "$CONFIG" -q
-BIN="$(swift build -c "$CONFIG" --show-bin-path)/Padafa"
+BIN="$(swift build -c "$CONFIG" --show-bin-path)/Openview"
 
 # Assemble in a staging dir, then install onto the internal disk. (Building/staging on the SSD is fine
 # — only the *running* binary must live on the internal volume.)
 STAGE="$(mktemp -d)/$APP_NAME"
 mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Resources"
-cp "$BIN" "$STAGE/Contents/MacOS/Padafa"
+cp "$BIN" "$STAGE/Contents/MacOS/Openview"
 cp Info.plist "$STAGE/Contents/Info.plist"
 printf 'APPL????' > "$STAGE/Contents/PkgInfo"
 # No Python sidecar. Embeddings = e5-small-v2 via Core ML (bundled .mlpackage) + a pure-Swift tokenizer, so
@@ -53,7 +53,7 @@ echo "installed $APP"
 # Remove any stale copy sitting on the SSD next to the sources — running THAT is the crash we just fixed.
 if [ -d "$PWD/$APP_NAME" ]; then rm -rf "$PWD/$APP_NAME"; echo "removed stale $PWD/$APP_NAME (do not run from the SSD)"; fi
 
-# Register with Launch Services so it picks up CFBundleDocumentTypes (PDF) → 'Open With → Padafa'.
+# Register with Launch Services so it picks up CFBundleDocumentTypes (PDF) → 'Open With → Openview'.
 LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 "$LSREG" -f "$APP" && echo "lsregister OK"
 echo "built $APP"

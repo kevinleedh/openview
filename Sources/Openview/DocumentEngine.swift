@@ -12,7 +12,7 @@ final class DocumentEngine {
 
     private weak var pdf: PDFViewController?
     private weak var ai: AIPanelViewController?
-    private let work = DispatchQueue(label: "com.padafa.engine", qos: .userInitiated)
+    private let work = DispatchQueue(label: "com.openview.engine", qos: .userInitiated)
 
     private var pdfURL: URL?
     private var dbPath = ""
@@ -55,7 +55,7 @@ final class DocumentEngine {
                 // (PDFKit is main-thread-affine; reusing it off-main deadlocks). Data-backed (no mmap) is also
                 // safe on a removable volume. PDFKit extraction + NLEmbedding indexing all run off-main here.
                 guard let data = try? Data(contentsOf: url), let doc = PDFDocument(data: data) else {
-                    throw NSError(domain: "Padafa.Engine", code: 1, userInfo: [NSLocalizedDescriptionKey:
+                    throw NSError(domain: "Openview.Engine", code: 1, userInfo: [NSLocalizedDescriptionKey:
                         "Couldn't read the PDF for analysis. Check the drive connection and reopen the document."])
                 }
                 try DocumentIndex.build(document: doc, indexPath: self.dbPath, provider: Embeddings.current)
@@ -297,8 +297,8 @@ final class DocumentEngine {
         let fm = FileManager.default
         let dir = (try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                appropriateFor: nil, create: true))?
-            .appendingPathComponent("Padafa/index", isDirectory: true)
-            ?? fm.temporaryDirectory.appendingPathComponent("Padafa/index", isDirectory: true)
+            .appendingPathComponent("Openview/index", isDirectory: true)
+            ?? fm.temporaryDirectory.appendingPathComponent("Openview/index", isDirectory: true)
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let canonical = pdfURL.standardizedFileURL.path
         let digest = SHA256.hash(data: Data(canonical.utf8))

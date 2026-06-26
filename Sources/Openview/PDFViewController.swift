@@ -1,6 +1,6 @@
 import AppKit
 import PDFKit
-import PadafaKit
+import OpenviewKit
 
 /// Receives viewer-state changes so the toolbar can update WITHOUT any view re-render in the scroll
 /// path. (In the old SwiftUI build, publishing these re-ran `ContentView.body` mid-glide and fought the
@@ -633,7 +633,7 @@ final class PDFViewController: NSViewController, NSTextViewDelegate {
     }
 
     /// Strip transient (non-user) annotations before the document serializes, so a verification citation
-    /// highlight isn't baked into the saved PDF. Called by PadafaDocument.data(ofType:).
+    /// highlight isn't baked into the saved PDF. Called by OpenviewDocument.data(ofType:).
     func prepareForSave() {
         finishEditing()                                            // commit any in-progress text-box edit first
         if let active = activeCitation {

@@ -24,7 +24,7 @@ BUNDLE_ID="com.openview.app"
 TEAM_ID="7ZK3PB84L8"
 SIGN_IDENTITY="Developer ID Application: YOUR NAME (7ZK3PB84L8)"   # <-- from `security find-identity -v -p codesigning`
 NOTARY_PROFILE="AC_NOTARY"                                          # <-- the name you used in `notarytool store-credentials`
-SWIFT_PRODUCT="Padafa"                                              # the SwiftPM executable target (binary name in build dir)
+SWIFT_PRODUCT="Openview"                                              # the SwiftPM executable target (binary name in build dir)
 ENTITLEMENTS="Openview.entitlements"                               # optional; only used if the file exists
 # -----------------------------------------------------------------------------
 
@@ -65,7 +65,7 @@ if [ -d tools/artifacts/e5-small-v2.mlpackage ]; then
   cp -R tools/artifacts/e5-small-v2.mlpackage "$APP/Contents/Resources/"
   cp tools/artifacts/e5-vocab.txt tools/artifacts/e5-tokenizer.json "$APP/Contents/Resources/"
 fi
-# Rebrand the STAGED Info.plist to Openview (the repo Info.plist stays "Padafa" so dev's make_app.sh is unaffected).
+# Rebrand the STAGED Info.plist to Openview (the repo Info.plist stays "Openview" so dev's make_app.sh is unaffected).
 "$PB" -c "Set :CFBundleName $APP_NAME"        "$APP/Contents/Info.plist"
 "$PB" -c "Set :CFBundleDisplayName $APP_NAME" "$APP/Contents/Info.plist"
 "$PB" -c "Set :CFBundleExecutable $APP_NAME"  "$APP/Contents/Info.plist"

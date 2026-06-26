@@ -35,7 +35,7 @@ protocol EmbeddingProvider {
     var gateHigh: Double { get }
 }
 
-/// Read a Double env override (PADAFA_GATE / PADAFA_GATE_HIGH apply to whichever embedder is active).
+/// Read a Double env override (OPENVIEW_GATE / OPENVIEW_GATE_HIGH apply to whichever embedder is active).
 func gateOverride(_ key: String, default def: Double) -> Double {
     if let s = ProcessInfo.processInfo.environment[key], let v = Double(s) { return v }
     return def
@@ -97,8 +97,8 @@ final class NLEmbeddingProvider: EmbeddingProvider {
     var isAvailable: Bool { sentence != nil }
     // NLEmbedding's weak, doc-size-inflated cosine can't cleanly separate on/off-topic (calibration found a
     // −0.27 overlap), so it uses a two-threshold + BM25-anchor gate (LOW 0.35 / HIGH 0.42 → on 95% / off 60%).
-    let gateLow = gateOverride("PADAFA_GATE", default: 0.35)
-    let gateHigh = gateOverride("PADAFA_GATE_HIGH", default: 0.42)
+    let gateLow = gateOverride("OPENVIEW_GATE", default: 0.35)
+    let gateHigh = gateOverride("OPENVIEW_GATE_HIGH", default: 0.42)
 
     /// NLEmbedding is SYMMETRIC (no query/passage prefixes), so `kind` is ignored here.
     func embed(_ text: String, kind: EmbedKind) -> [Float]? {

@@ -2,7 +2,7 @@ import Foundation
 import CoreGraphics
 import AppKit
 import PDFKit
-import PadafaKit
+import OpenviewKit
 
 // coordcli — coordinate-PoC driver. Subcommands:
 //   selftest                          run adapter (y-flip) assertions; exit 1 on failure

@@ -1,7 +1,7 @@
 import Foundation
 
 /// F8 Q&A — answer with a LOCAL model via Ollama's OpenAI-compatible endpoint
-/// (`POST {base}/v1/chat/completions`). The model runs inside the OLLAMA process; Padafa only makes HTTP
+/// (`POST {base}/v1/chat/completions`). The model runs inside the OLLAMA process; Openview only makes HTTP
 /// calls, so this adds NO model memory to the app — the 8GB-safe path (no MLX-direct load / OOM). Parallels
 /// `CloudQA` (same OpenAI request shape; only the address is localhost and the key is a throwaway "ollama").
 /// Supports both non-streaming and SSE streaming, so the unverified path streams like Apple on-device.
@@ -111,6 +111,6 @@ enum OllamaQA {
     }
 
     private static func err(_ message: String) -> NSError {
-        NSError(domain: "Padafa.Ollama", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+        NSError(domain: "Openview.Ollama", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
     }
 }

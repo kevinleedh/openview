@@ -2,10 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key>                  <string>Padafa</string>
-    <key>CFBundleDisplayName</key>           <string>Padafa</string>
-    <key>CFBundleExecutable</key>            <string>Padafa</string>
-    <key>CFBundleIdentifier</key>            <string>com.padafa.app</string>
+    <key>CFBundleName</key>                  <string>Openview</string>
+    <key>CFBundleDisplayName</key>           <string>Openview</string>
+    <key>CFBundleExecutable</key>            <string>Openview</string>
+    <key>CFBundleIdentifier</key>            <string>com.openview.app</string>
     <key>CFBundlePackageType</key>           <string>APPL</string>
     <key>CFBundleInfoDictionaryVersion</key> <string>6.0</string>
     <key>CFBundleShortVersionString</key>    <string>0.1</string>
@@ -14,9 +14,9 @@
     <key>NSPrincipalClass</key>              <string>NSApplication</string>
     <key>NSHighResolutionCapable</key>       <true/>
     <key>LSApplicationCategoryType</key>     <string>public.app-category.productivity</string>
-    <key>NSHumanReadableCopyright</key>      <string>Padafa — a Mac PDF AI viewer.</string>
+    <key>NSHumanReadableCopyright</key>      <string>Openview — a Mac PDF AI viewer.</string>
     <!-- NSDocument architecture: bind the PDF document type to our NSDocument subclass so
-         NSDocumentController instantiates it for ⌘O and Finder 'Open With → Padafa'. -->
+         NSDocumentController instantiates it for ⌘O and Finder 'Open With → Openview'. -->
     <key>CFBundleDocumentTypes</key>
     <array>
         <dict>
@@ -25,7 +25,7 @@
                  annotations can be written back into the PDF. -->
             <key>CFBundleTypeRole</key>      <string>Editor</string>
             <key>LSHandlerRank</key>         <string>Alternate</string>
-            <key>NSDocumentClass</key>       <string>PadafaDocument</string>
+            <key>NSDocumentClass</key>       <string>OpenviewDocument</string>
             <key>LSItemContentTypes</key>
             <array>
                 <string>com.adobe.pdf</string>
