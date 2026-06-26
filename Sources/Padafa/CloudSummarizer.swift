@@ -1,17 +1,15 @@
 import Foundation
 
-/// F8 Stage 2b — CLOUD summarization, Swift-direct (URLSession → Anthropic /v1/messages).
+/// CLOUD summarization, Swift-direct (URLSession → Anthropic /v1/messages), STREAMING via SSE so the summary
+/// appears progressively (like the on-device summary and Apple Q&A) instead of dumping all at once.
 ///
-/// Deliberately does NOT go through the Python sidecar: F8 is sidecar-free by design, a URLSession call
-/// adds essentially no resident memory (vs spawning the heavy Python ML process — the whole point of the
-/// 8GB cloud offload), and it never touches the Q&A retrieval/NLI grounding path (that is `answer.py`,
-/// which ALWAYS re-verifies — wrong for a free-form whole-document summary). The whole document text is
-/// sent to the cloud model and the result is shown UNVERIFIED, exactly like the on-device summary.
+/// Deliberately does NOT go through the Python sidecar: a URLSession call adds essentially no resident memory
+/// (vs spawning the heavy Python ML process), and it never touches the Q&A retrieval/NLI grounding path (that
+/// is `answer.py`, which ALWAYS re-verifies — wrong for a free-form whole-document summary). The whole document
+/// text is sent to the cloud model and the result is shown UNVERIFIED, exactly like the on-device summary.
 ///
-/// Request shape mirrors sidecar/cloudllm.py verbatim (headers x-api-key + anthropic-version, body
-/// {model, max_tokens, system, messages}, NO temperature). Non-streaming first cut (one blocking POST,
-/// concatenate the `content[]` text blocks); SSE streaming is a straightforward follow-up since the panel
-/// already supports cumulative streaming. Works on any macOS (no FoundationModels dependency).
+/// Request shape mirrors sidecar/cloudllm.py (headers x-api-key + anthropic-version, body {model, max_tokens,
+/// system, messages}, NO temperature) plus `stream: true`. Works on any macOS (no FoundationModels dependency).
 enum CloudSummarizer {
 
     /// Whole-document summarization prompt (distinct from the on-device "few sentences" prompt — a cloud
@@ -23,10 +21,67 @@ enum CloudSummarizer {
 
     private static let maxOutputTokens = 2048
 
-    /// Summarize the full document text with the configured cloud model. Throws a distinct
-    /// ``SummarizationError`` for each failure mode (nothing swallowed). The key/model come from
-    /// `CloudBackend.current()` (env `PADAFA_ANTHROPIC_KEY` → Keychain) — caller ensures a key exists first.
-    static func summarize(_ text: String) async throws -> String {
+    /// Stream the cloud summary, yielding the CUMULATIVE text so far (the panel just SETS the answer body to
+    /// the latest value, like every other streaming path). The key/model come from `CloudBackend.current()`
+    /// (env `PADAFA_ANTHROPIC_KEY` → Keychain); the caller ensures a key exists first. Throws a distinct
+    /// ``SummarizationError`` per failure mode (nothing swallowed).
+    static func summarizeStream(_ text: String) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    let req = try makeRequest(text)
+                    let (bytes, response): (URLSession.AsyncBytes, URLResponse)
+                    do { (bytes, response) = try await URLSession.shared.bytes(for: req) }
+                    catch { throw SummarizationError.network(error.localizedDescription) }
+                    guard let http = response as? HTTPURLResponse else {
+                        throw SummarizationError.network("No HTTP response")
+                    }
+                    guard http.statusCode == 200 else {
+                        // A non-200 returns a plain JSON error body (not SSE) — drain it for the detail.
+                        var errData = Data()
+                        for try await b in bytes { errData.append(b) }
+                        throw statusError(http.statusCode, errorMessage(from: errData))
+                    }
+                    // Anthropic SSE: each event is an `event:` line + a `data: {json}` line. We only need the
+                    // data lines and dispatch on the JSON's own "type": text_delta chunks → append; error →
+                    // throw; message_stop → done.
+                    var acc = ""
+                    for try await line in bytes.lines {
+                        guard line.hasPrefix("data:") else { continue }
+                        let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+                        guard let d = payload.data(using: .utf8),
+                              let obj = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+                              let type = obj["type"] as? String else { continue }
+                        switch type {
+                        case "content_block_delta":
+                            if let delta = obj["delta"] as? [String: Any],
+                               (delta["type"] as? String) == "text_delta",
+                               let t = delta["text"] as? String, !t.isEmpty {
+                                acc += t
+                                continuation.yield(acc)
+                            }
+                        case "message_stop":
+                            continuation.finish(); return
+                        case "error":
+                            let msg = (obj["error"] as? [String: Any])?["message"] as? String ?? "stream error"
+                            throw SummarizationError.generationFailed(msg)
+                        default:
+                            continue
+                        }
+                    }
+                    if acc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        throw SummarizationError.generationFailed("Empty cloud response")
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    private static func makeRequest(_ text: String) throws -> URLRequest {
         guard let backend = CloudBackend.current(),
               let key = backend["key"], let model = backend["model"] else {
             throw SummarizationError.cloudKeyMissing
@@ -42,47 +97,25 @@ enum CloudSummarizer {
         let body: [String: Any] = [
             "model": model,
             "max_tokens": maxOutputTokens,
+            "stream": true,
             "system": instructions,
             "messages": [["role": "user", "content": "Summarize the following document:\n\n\(text)"]],
         ]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return req
+    }
 
-        let data: Data, response: URLResponse
-        do {
-            (data, response) = try await URLSession.shared.data(for: req)
-        } catch {
-            throw SummarizationError.network(error.localizedDescription)
+    /// Map an Anthropic HTTP error status → a distinct SummarizationError.
+    private static func statusError(_ code: Int, _ detail: String) -> SummarizationError {
+        switch code {
+        case 401, 403: return .cloudAuthFailed(detail.isEmpty ? "Anthropic rejected the API key" : detail)
+        case 429:      return .rateLimited(detail)
+        case 400 where detail.lowercased().contains("token") || detail.lowercased().contains("long")
+                        || detail.lowercased().contains("large") || detail.lowercased().contains("maximum"):
+            return .contextWindowExceeded(detail)                       // doc too big even for the cloud model
+        case 500...599: return .network("Anthropic service error (HTTP \(code))")
+        default:        return .generationFailed("HTTP \(code): \(detail)")
         }
-        guard let http = response as? HTTPURLResponse else {
-            throw SummarizationError.network("No HTTP response")
-        }
-        guard http.statusCode == 200 else {
-            let detail = errorMessage(from: data)
-            switch http.statusCode {
-            case 401, 403:
-                throw SummarizationError.cloudAuthFailed(detail.isEmpty ? "Anthropic rejected the API key" : detail)
-            case 429:
-                throw SummarizationError.rateLimited(detail)
-            case 400 where detail.lowercased().contains("token") || detail.lowercased().contains("long")
-                            || detail.lowercased().contains("large") || detail.lowercased().contains("maximum"):
-                throw SummarizationError.contextWindowExceeded(detail)   // doc too big even for the cloud model
-            case 500...599:
-                throw SummarizationError.network("Anthropic service error (HTTP \(http.statusCode))")
-            default:
-                throw SummarizationError.generationFailed("HTTP \(http.statusCode): \(detail)")
-            }
-        }
-        // Concatenate every text content block (mirrors cloudllm.py response parsing).
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let content = obj["content"] as? [[String: Any]] else {
-            throw SummarizationError.generationFailed("Malformed Anthropic response")
-        }
-        let summary = content
-            .compactMap { ($0["type"] as? String) == "text" ? $0["text"] as? String : nil }
-            .joined()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !summary.isEmpty else { throw SummarizationError.generationFailed("Empty cloud response") }
-        return summary
     }
 
     /// Pull `error.message` out of an Anthropic error body, if present.

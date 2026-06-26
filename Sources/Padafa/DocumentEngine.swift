@@ -262,11 +262,10 @@ final class DocumentEngine {
         Task.detached { [weak self] in
             guard let self else { return }
             do {
-                let summary = try await CloudSummarizer.summarize(text)
-                await MainActor.run {
-                    self.ai?.streamSummary(summary)                  // single fill (non-streaming first cut)
-                    self.ai?.completeSummary()
+                for try await partial in CloudSummarizer.summarizeStream(text) {   // SSE → progressive output
+                    await MainActor.run { self.ai?.streamSummary(partial) }
                 }
+                await MainActor.run { self.ai?.completeSummary() }
             } catch let e as SummarizationError {
                 await MainActor.run { self.ai?.failSummary(e.errorDescription ?? "Cloud summarization failed.") }
             } catch {
