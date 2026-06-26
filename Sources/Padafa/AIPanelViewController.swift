@@ -429,18 +429,6 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
         scrollToBottom()
     }
 
-    /// Unverified mode + off-topic (gate rejected) → a "not in this document" notice INSTEAD of a (possibly
-    /// wrong) general-knowledge answer. No LLM was called, so this is also instant.
-    func completeNoMatch() {
-        guard let host = pendingAnswerHost else { state = .ready; return }
-        host.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        addText(to: host, attributed: styled("This document doesn't contain anything relevant. Please ask about this document.",
-                                             color: .secondaryLabelColor))
-        pendingAnswerHost = nil
-        state = .ready
-        scrollToBottom()
-    }
-
     /// Non-English question (a blocked non-Latin script) → the app is English-only; show a notice, call no model.
     func completeEnglishOnly() {
         guard let host = pendingAnswerHost else { state = .ready; return }

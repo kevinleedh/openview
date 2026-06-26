@@ -8,17 +8,13 @@ import Foundation
 /// re-grounds this text via the sidecar `pregenerated` route). Reuses `SummarizationError` for failures.
 enum CloudQA {
 
-    /// Same intent as OnDeviceQA's document prompt — answer from the passages, concise, no passage numbers.
+    /// FIXED system instruction (matches OnDeviceQA / OllamaQA verbatim → stable prefix for caching). RAW
+    /// direction: dense, direct output and NO forced refusal — answer freely from the excerpts and the model's
+    /// own knowledge.
     private static let fromDocumentInstructions =
-        "You answer the user's question about an open document. Use the numbered context passages below as "
-        + "your source of facts. Answer in 1–4 concise sentences in English. If the "
-        + "passages don't fully cover the question, answer with what they do contain. Do not mention passage "
-        + "numbers or say 'according to the passage'."
-
-    private static let generalInstructions =
-        "Answer the user's question concisely (1–4 sentences) in English, from your "
-        + "general knowledge. The user's open document does not contain information about this, so answer from "
-        + "what you already know."
+        "You are a reading assistant for the open document. Use the provided excerpts from the document to "
+        + "answer the user's question. Answer directly and concisely — no preamble, no repetition, no filler. "
+        + "Be thorough when the question needs depth, but don't pad."
 
     private static let maxOutputTokens = 2048   // headroom so a verbose answer isn't cut off mid-sentence
 
@@ -26,10 +22,6 @@ enum CloudQA {
         let context = chunks.enumerated().map { "[\($0.offset + 1)] \($0.element)" }.joined(separator: "\n\n")
         return try await post(model: model, key: key, system: fromDocumentInstructions,
                               user: "Context passages:\n\(context)\n\nQuestion: \(question)")
-    }
-
-    static func answerFromGeneralKnowledge(question: String, model: String, key: String) async throws -> String {
-        return try await post(model: model, key: key, system: generalInstructions, user: question)
     }
 
     /// One blocking POST to /v1/messages; concatenate the text content blocks. Distinct SummarizationError per

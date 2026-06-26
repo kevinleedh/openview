@@ -9,12 +9,13 @@ import Foundation
 /// afterward (the same `pregenerated` re-grounding path the Apple/cloud paths use).
 enum OllamaQA {
 
-    /// Same intent as OnDeviceQA / CloudQA — answer from the passages, concise, no passage numbers.
+    /// FIXED system instruction (matches OnDeviceQA / CloudQA verbatim → stable prefix for caching). RAW
+    /// direction: dense, direct output and NO forced refusal — answer freely from the excerpts and the model's
+    /// own knowledge.
     private static let fromDocumentInstructions =
-        "You answer the user's question about an open document. Use the numbered context passages below as "
-        + "your source of facts. Answer in 1–4 concise sentences in English. If the "
-        + "passages don't fully cover the question, answer with what they do contain. Do not mention passage "
-        + "numbers or say 'according to the passage'."
+        "You are a reading assistant for the open document. Use the provided excerpts from the document to "
+        + "answer the user's question. Answer directly and concisely — no preamble, no repetition, no filler. "
+        + "Be thorough when the question needs depth, but don't pad."
 
     private static let maxOutputTokens = 2048   // headroom so a verbose local model isn't cut off mid-sentence
 

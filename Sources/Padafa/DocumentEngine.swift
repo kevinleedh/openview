@@ -84,10 +84,11 @@ final class DocumentEngine {
 
     // MARK: – Q&A routing (AI-answer-only; pure Swift, no Python sidecar).
     //
-    // Flow: Swift-native retrieval (DocumentIndex: NLEmbedding cosine ⊕ BM25 + off-topic gate) → if the gate
-    // passes, the selected MODEL generates from the retrieved chunks (Apple on-device / cloud Claude / Ollama,
-    // all Swift-side); off-topic → "not in this document" (no LLM call). The answer is shown as-is — NLI
-    // verification + element-bbox citations were Python-only and have been removed with the sidecar.
+    // Flow (RAW — no relevance rejection): Swift-native retrieval (DocumentIndex: e5/NLEmbedding cosine ⊕ BM25,
+    // ranking only) → the selected MODEL ALWAYS generates from the retrieved chunks (Apple on-device / cloud
+    // Claude / Ollama, all Swift-side). Every question goes to the LLM; there is no off-topic gate and no "not in
+    // this document" short-circuit. The answer is shown as-is — NLI verification + element-bbox citations were
+    // Python-only and have been removed with the sidecar.
 
     private func ask(_ question: String) {
         let db = dbPath
@@ -110,17 +111,11 @@ final class DocumentEngine {
         Task.detached { [weak self] in
             guard let self else { return }
             do {
-                // 1) retrieve (pure-Swift NLEmbedding cosine ⊕ BM25 hybrid + off-topic gate)
+                // 1) retrieve (pure-Swift e5/NLEmbedding cosine ⊕ BM25 hybrid). RAW direction: NO off-topic gate —
+                //    retrieval always returns the top-k chunks and we ALWAYS proceed to generation. The retrieved
+                //    passages are context for the LLM; if they don't cover the question, the model answers freely.
                 let r = try DocumentIndex.retrieve(indexPath: db, question: question, provider: Embeddings.current)
                 let chunkTexts = r.chunks.map { $0.text }
-                let relevant = r.grounded && !chunkTexts.isEmpty
-
-                // Off-topic (gate rejected) → NO generation (fast: zero LLM calls): a "not in this document"
-                // notice instead of a possibly-wrong general-knowledge answer. Same for EVERY provider.
-                if !relevant {
-                    await MainActor.run { self.ai?.completeNoMatch() }
-                    return
-                }
 
                 // 2) generate FROM THE CHUNKS. Streaming providers (Apple on-device, Ollama local) stream —
                 //    first words appear as the model produces them; cloud is non-streaming (falls through).

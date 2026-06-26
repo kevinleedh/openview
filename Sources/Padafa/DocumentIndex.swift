@@ -11,9 +11,10 @@ import PDFKit
 ///   • RETRIEVAL UNIT = a context-rich WINDOW (a few consecutive sentences within one page), embedded for
 ///     ranking — not a single sentence (the recall@1 lesson).
 ///   • HYBRID retrieval = cosine (semantic) ⊕ BM25 (lexical), fused by reciprocal rank.
-///   • OFF-TOPIC GATE on PURE COSINE top-1 — when embeddings are available, BM25 can't leak an off-topic
-///     query past the gate. If the embedder is unavailable (no vectors at all), retrieval degrades to
-///     BM25-only and the gate falls back to "any lexical hit" (lower quality — logged + see retrieve()).
+///
+/// RAW direction (no relevance rejection): retrieval ALWAYS returns the top-k chunks — there is no off-topic
+/// gate in the answer path. `gate(_:low:high:)` + the providers' `gateLow`/`gateHigh` are retained ONLY for the
+/// offline calibration harness (`benchmark/gate_calibration.swift`); they no longer block any answer.
 ///
 /// What changed vs the sidecar (the deferred "quality" pass owns these):
 ///   • Parsing is PDFKit page text, not Docling — so there is no element bbox / table structure, hence no
@@ -66,9 +67,9 @@ enum DocumentIndex {
         let page: Int
     }
     struct Result {
-        let grounded: Bool              // cosine top-1 ≥ cutoff (the off-topic gate)
+        let grounded: Bool              // vestigial (no off-topic gate anymore) — always true on the normal path
         let topScore: Double
-        let chunks: [Chunk]             // [] when the gate rejects
+        let chunks: [Chunk]             // the top-k ranked windows (never gated away)
     }
 
     // MARK: – Build (ingest)
@@ -142,37 +143,37 @@ enum DocumentIndex {
 
     // MARK: – Retrieve (query)
 
-    /// Hybrid retrieval + off-topic gate. Loads the persisted index, embeds the question, ranks by cosine and
-    /// BM25, fuses by reciprocal rank, and gates on cosine top-1. Throws if the index is missing/corrupt or
-    /// was built by a different embedder (the caller treats that as "re-ingest needed").
+    /// Hybrid retrieval (no off-topic gate). Loads the persisted index, embeds the question, ranks by cosine and
+    /// BM25, fuses by reciprocal rank, and ALWAYS returns the top-k chunks. Throws if the index is missing/corrupt
+    /// or was built by a different embedder (the caller treats that as "re-ingest needed").
     ///
-    /// `grounded == false` → the gate rejected (no relevant chunks); the caller answers "not in this document".
-    /// When the embedder is unavailable (no vectors), retrieval degrades to BM25-only and the gate falls back
-    /// to "any lexical hit" so the feature still works (lower quality — surfaced to the user separately).
+    /// RAW direction: there is no relevance rejection — every question's top-k windows go to the LLM, which
+    /// answers freely. `grounded` is retained on `Result` for source compatibility and is always `true` here.
     static func retrieve(indexPath: String, question: String, provider: EmbeddingProvider, k: Int = 8) throws -> Result {
         let windows = try loadWindows(indexPath: indexPath, provider: provider)
         guard !windows.isEmpty else { return Result(grounded: false, topScore: 0, chunks: []) }
 
         let s = signals(windows: windows, question: question, provider: provider, k: k)
-        let grounded = gate(s, low: provider.gateLow, high: provider.gateHigh)
-        let chunks = grounded ? s.fusedTopIdx.map { Chunk(text: windows[$0].text, page: windows[$0].page) } : []
+        // RAW direction: NO off-topic gate. Ranking (cosine ⊕ BM25 ⊕ RRF) still picks the best windows, but we
+        // never REJECT — the top-k chunks are ALWAYS handed to the LLM, which answers freely. (`gate(_:)` +
+        // `gateLow`/`gateHigh` remain only for the offline calibration harness; they no longer block any answer.)
+        let chunks = s.fusedTopIdx.map { Chunk(text: windows[$0].text, page: windows[$0].page) }
 
-        // Step-6 hook: a compact, behavior-neutral retrieval log (the calibration data source). Now carries the
-        // auxiliary gate signals — top1/top2 cosine, top-k mean, BM25 hit count — so a labeled on-/off-topic
-        // sweep can pick the gate rule. Verbose per-chunk dump under PADAFA_RETRIEVE_DEBUG=1.
+        // Behavior-neutral retrieval log (ranking diagnostics only — no gate decision). Verbose per-chunk dump
+        // under PADAFA_RETRIEVE_DEBUG=1.
         let scores = s.fusedTopIdx.map { String(format: "%.3f", max(0, s.cosine[$0])) }.joined(separator: ",")
         let pages = s.fusedTopIdx.map { String(windows[$0].page) }.joined(separator: ",")
         let semState = s.semanticAvailable ? "cosine"
             : (provider.isAvailable ? "bm25-only" : "bm25-only(NLEmbedding-unavailable)")
-        NSLog("[retrieve] top1=%.3f top2=%.3f kmean=%.3f bm25=%d grounded=%@ k=%d sem=%@ scores=[%@] pages=[%@] q=%@",
-              s.top1, s.top2, s.topKMean, s.bm25Hits, grounded ? "true" : "false", chunks.count, semState, scores, pages, question)
+        NSLog("[retrieve] top1=%.3f top2=%.3f kmean=%.3f bm25=%d k=%d sem=%@ scores=[%@] pages=[%@] q=%@",
+              s.top1, s.top2, s.topKMean, s.bm25Hits, chunks.count, semState, scores, pages, question)
         if ProcessInfo.processInfo.environment["PADAFA_RETRIEVE_DEBUG"] == "1" {
             for (n, idx) in s.fusedTopIdx.enumerated() {
                 NSLog("[retrieve]   #%d p%d cos=%.3f: %@", n + 1, windows[idx].page,
                       max(0, s.cosine[idx]), String(windows[idx].text.prefix(160)))
             }
         }
-        return Result(grounded: grounded, topScore: s.top1, chunks: chunks)
+        return Result(grounded: true, topScore: s.top1, chunks: chunks)
     }
 
     /// All the raw retrieval signals for one query — kept SEPARATE from the gate DECISION (`gate(_:)`) so the
@@ -228,7 +229,8 @@ enum DocumentIndex {
                        bm25Hits: bm25Hits, bm25TopCosine: bm25TopCosine, fusedTopIdx: fusedTopIdx, cosine: cosine)
     }
 
-    /// THE off-topic gate decision — the calibration target. `low`/`high` are the ACTIVE embedder's
+    /// THE off-topic gate decision — RETAINED ONLY for the offline calibration harness; it is NO LONGER called
+    /// by `retrieve()` (the answer path never rejects). `low`/`high` are the ACTIVE embedder's
     /// `gateLow`/`gateHigh` (embedder-specific scales). Rule:
     ///   • STRONG semantic match (top1 ≥ `high`) → relevant, no lexical anchor required.
     ///   • MODERATE match (`low` ≤ top1 < `high`) → relevant ONLY with a BM25 lexical anchor (catches a
