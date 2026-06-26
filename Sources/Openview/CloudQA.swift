@@ -1,7 +1,7 @@
 import Foundation
 
 /// F8 Q&A — answer a question with a CLOUD model (Swift-direct → Anthropic /v1/messages), the generator used
-/// when a cloud model is selected. Mirrors `CloudSummarizer`'s request shape verbatim (headers x-api-key +
+/// when a cloud model is selected. Uses the Anthropic /v1/messages request shape (headers x-api-key +
 /// anthropic-version, body {model, max_tokens, system, messages}, no temperature). Parallels `OnDeviceQA`:
 /// document-grounded (from retrieved chunks) and general-knowledge modes. This only GENERATES — whether the
 /// answer is NLI-verified afterward is decided independently by `Settings.verifyEnabled` (the verified path
@@ -25,7 +25,7 @@ enum CloudQA {
     }
 
     /// One blocking POST to /v1/messages; concatenate the text content blocks. Distinct SummarizationError per
-    /// failure (nothing swallowed) — mirrors CloudSummarizer.
+    /// failure (nothing swallowed).
     private static func post(model: String, key: String, system: String, user: String) async throws -> String {
         var req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
         req.httpMethod = "POST"

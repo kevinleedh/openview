@@ -100,7 +100,7 @@ final class DocumentWindowController: NSWindowController {
         (self.document as? OpenviewDocument)?.prepareForSave = { [weak self] in self?.splitVC.pdf.prepareForSave() }
         // Prefer the NSDocument's fileURL. A PDF on a removable/external volume is loaded via
         // PDFDocument(data:) (the SIGBUS crash-fix), so its `documentURL` is NIL — relying on that would skip
-        // engine creation and leave ALL AI features (Q&A + F8 summary) dead for every external-drive PDF.
+        // engine creation and leave ALL AI features (Q&A) dead for every external-drive PDF.
         // `fileURL` is always present once the document is opened; documentURL is the fallback.
         if let url = fileURL ?? document?.documentURL {
             window?.title = url.deletingPathExtension().lastPathComponent

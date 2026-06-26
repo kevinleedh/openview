@@ -1,9 +1,8 @@
 import AppKit
 
-/// F8 Stage 2b — minimal AppKit API-key input. The prior build's full provider/key settings UI
-/// (`LLMSettings`) is SwiftUI-coupled and deferred to 4b, and no AppKit key-input UI exists yet, so this
-/// is the smallest thing that lets a user supply a cloud key when a large document needs cloud summarization.
-/// On save it writes to the Keychain via the already-present (but until now unused) `Keychain.save`.
+/// Minimal AppKit API-key input — the smallest thing that lets a user supply a cloud-model API key (e.g. from
+/// the model settings). On save it writes to the Keychain via `Keychain.save`. No longer tied to summarization:
+/// the cloud summary path was removed, so a "summarize" request is answered on-device like any other question.
 ///
 /// Framed as a capability ("needs more powerful processing — add a key"), NOT a failure. The USER types
 /// the key into the secure field; the app never originates or transmits a key it wasn't given here.
@@ -14,7 +13,7 @@ enum APIKeyPrompt {
     @discardableResult
     static func promptAndSave(message: String) -> Bool {
         let alert = NSAlert()
-        alert.messageText = "Cloud summarization"
+        alert.messageText = "Cloud model API key"
         alert.informativeText = message
         alert.alertStyle = .informational
         alert.addButton(withTitle: "Save")

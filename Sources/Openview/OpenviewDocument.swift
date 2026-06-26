@@ -53,7 +53,7 @@ final class OpenviewDocument: NSDocument {
         addWindowController(controller)
         // Pass the source fileURL explicitly: for a removable-volume PDF loaded via PDFDocument(data:), the
         // PDFDocument's own documentURL is nil, so the window controller needs the NSDocument's fileURL to
-        // create the grounding/summarize engine (otherwise AI features are dead on external drives).
+        // create the grounding (Q&A) engine (otherwise AI features are dead on external drives).
         controller.loadDocument(pdfDocument, fileURL: fileURL)
     }
 

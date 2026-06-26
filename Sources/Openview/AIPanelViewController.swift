@@ -86,9 +86,6 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
     /// Wired by DocumentEngine: send a question, and handle a citation chip click.
     var onAsk: ((String) -> Void)?
     var onCitationClick: ((Citation) -> Void)?
-    /// F8: request a whole-document summary (Apple Foundation Models, separate from the grounded Q&A path).
-    var onSummarize: (() -> Void)?
-
     private let notFoundCopy = "Couldn't find supporting evidence in this document."
 
     private enum State { case analyzing, ready, thinking }
@@ -225,9 +222,9 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
         sendButton.translatesAutoresizingMaskIntoConstraints = false
         sendButton.setContentHuggingPriority(.required, for: .horizontal)
         sendButton.heightAnchor.constraint(equalToConstant: 30).isActive = true
-        // Summarize is no longer a button — a summary is requested in chat ("요약해줘" / "summarize"), which
-        // handleSend detects. Plain Return → Send (the default-button key equivalent); Shift+Return → newline
-        // (its modifier doesn't match the button's mask, so it falls through to the text view).
+        // Plain Return → Send (the default-button key equivalent); Shift+Return → newline (its modifier doesn't
+        // match the button's mask, so it falls through to the text view). Every message is a normal Q&A question —
+        // there is no separate summarize path (a "summarize this document" request is just answered like any other).
         let composer = NSStackView(views: [inputContainer, sendButton])
         composer.orientation = .horizontal
         composer.spacing = 8
@@ -442,41 +439,6 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
         scrollToBottom()
     }
 
-    // MARK: – Whole-document summary — rendered as a NORMAL Q&A turn (request bubble + plain answer).
-    // The engine still calls these begin/stream/complete/info/fail hooks; they now just delegate to the Q&A
-    // renderers so a summary looks exactly like a question and its answer (no orange card / no "Sources not
-    // verified" header / no cloud-upgrade button) — what the user asked for.
-
-    /// The user's summary REQUEST becomes a right-side question bubble + a "Generating…" answer host.
-    func beginSummary(_ request: String) {
-        beginQuestion(request)
-    }
-
-    /// Progressive summary text → fills the answer like a streamed Q&A answer (Markdown, normal label color).
-    func streamSummary(_ cumulative: String) {
-        streamAnswer(cumulative)
-    }
-
-    /// Summary finished → finalize (the Q&A style has no cloud-upgrade button).
-    func completeSummary() {
-        finishStreamedAnswer()
-    }
-
-    /// Cloud summary starting (non-streaming) — keep the "Generating…" placeholder; the summary replaces it.
-    func cloudSummarizing() {
-        scrollToBottom()
-    }
-
-    /// Informational outcome (e.g. a large document needs a cloud key) → render the message as a plain answer.
-    func infoSummary(_ message: String) {
-        completeUnverifiedAnswer(message)
-    }
-
-    /// Summarization failed → render as a normal Q&A error.
-    func failSummary(_ message: String) {
-        completeError(message)
-    }
-
     // MARK: – State
 
     private func applyState() {
@@ -515,12 +477,6 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
             completeEnglishOnly()
             return
         }
-        // The Summarize button is gone — a summary is requested in chat. Detect that intent and route to the
-        // whole-document summary path; everything else is a normal grounded/on-device question.
-        if Self.isSummaryRequest(question) {
-            handleSummarize(question)
-            return
-        }
         beginQuestion(question)
         onAsk?(question)
     }
@@ -547,19 +503,6 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
             }
         }
         return false
-    }
-
-    /// Heuristic for "is this chat message a whole-document summary request?" — keyword-based, simple.
-    private static func isSummaryRequest(_ text: String) -> Bool {
-        text.lowercased().contains("summar")                    // summary / summarize / summarise
-    }
-
-    private func handleSummarize(_ request: String) {
-        // A summary is rendered as a normal Q&A turn (request bubble + plain answer). Only reachable from
-        // .ready (handleSend's guard), so no separate summarizing lock is needed.
-        guard state == .ready else { return }
-        beginSummary(request)
-        onSummarize?()
     }
 
     // User typing in the composer: refresh Send + grow the box. (Programmatic edits call these directly.)

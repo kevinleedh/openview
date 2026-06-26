@@ -22,7 +22,6 @@ final class DocumentEngine {
         self.ai = ai
         ai.onAsk = { [weak self] question in self?.ask(question) }
         ai.onCitationClick = { [weak self] citation in self?.pdf?.jumpHighlight(citation) }
-        ai.onSummarize = { [weak self] in self?.summarize() }
     }
 
     /// Kick off ingestion. Reuses an existing index instantly; otherwise embeds in the background while
@@ -168,121 +167,6 @@ final class DocumentEngine {
                 await MainActor.run { self.ai?.completeError(error.localizedDescription) }
             }
         }
-    }
-
-    // MARK: – F8 summary (Apple Foundation Models — a SEPARATE, Swift-native path; the Python sidecar,
-    // grounded Q&A, and citation/verification flow above are NOT involved).
-
-    /// On-device model context ≈ 4096 tokens. The FoundationModels SDK exposes NO input-token counter and
-    /// no context-window-size getter (verified against the swiftinterface), so we gate on a CHARACTER
-    /// heuristic — conservative for CJK (~3 chars/token) with headroom for the instructions + the generated
-    /// summary. Documents over the budget route to CLOUD (Stage 2b), NOT map-reduce. As a backstop, an
-    /// underestimate that still overflows is caught as `exceededContextWindowSize` and shown as the SAME
-    /// "needs cloud" message, so the two paths converge.
-    private static let summaryOnDeviceCharBudget = 8000
-    // PDFKit's `.string` can UNDER-extract a long PDF (a 15-page paper came back ≤8000 chars), which would
-    // sneak a big doc past a char-only gate. So ALSO gate on page count — a multi-page doc is "large"
-    // regardless of how much text PDFKit surfaced. ~6 pages of dense text is already near the on-device budget.
-    private static let summaryOnDevicePageBudget = 6
-    private static let cloudNeededMessage =
-        "This document is large and needs more powerful processing. Add an API key (when prompted) to summarize it with a cloud model."
-
-    /// Summarize the whole open document with Apple Foundation Models. Text comes from PDFKit
-    /// (`pdfView.document?.string`) — in-memory, no sidecar, no index dependency. Extraction + inference run
-    /// off the main thread; the panel renders the summary as a normal Q&A turn (request bubble + answer).
-    private func summarize() {
-        // The panel already showed the request as a Q&A turn (handleSummarize → beginSummary); fill the answer.
-        // PDFKit's PDFDocument is main-thread-affine, so the cheap gates + any `.string` extraction run on main;
-        // only the model call (on-device or cloud network) goes off-main.
-        guard let document = pdf?.pdfView.document else {
-            ai?.failSummary("Couldn't find a document to summarize.")
-            return
-        }
-        // Big doc (by page count) → CLOUD (Stage 2b). Page count is cheap, avoids extracting a huge doc's
-        // full text up front, and dodges PDFKit's under-extraction of long PDFs.
-        if document.pageCount > Self.summaryOnDevicePageBudget {
-            cloudSummarize(document)
-            return
-        }
-        let text = (document.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else {
-            ai?.failSummary("Couldn't extract text from this document. It may be a scanned (image) PDF.")
-            return
-        }
-        // Dense few-page doc over the on-device char budget → CLOUD.
-        if text.count > Self.summaryOnDeviceCharBudget {
-            cloudSummarize(document)
-            return
-        }
-        // On-device needs macOS 26 + Apple Intelligence on; otherwise fall back to CLOUD (OS-agnostic) so a
-        // short doc is still summarizable when on-device isn't available.
-        guard #available(macOS 26, *) else { cloudSummarize(document); return }
-        guard case .available = SummarizationService.availability() else { cloudSummarize(document); return }
-        // On-device generation (off the main thread).
-        Task.detached { [weak self] in
-            guard let self else { return }
-            do {
-                for try await partial in SummarizationService.summarizeStream(text) {
-                    await MainActor.run { self.ai?.streamSummary(partial) }
-                }
-                await MainActor.run { self.ai?.completeSummary() }
-            } catch let e as SummarizationError {
-                if case .contextWindowExceeded = e {                 // underestimate → escalate to cloud
-                    await MainActor.run { self.cloudSummarize(document) }
-                } else {
-                    await MainActor.run { self.ai?.failSummary(e.errorDescription ?? "Summarization failed.") }
-                }
-            } catch {
-                await MainActor.run { self.ai?.failSummary(error.localizedDescription) }
-            }
-        }
-    }
-
-    /// CLOUD summarize (Swift-direct Anthropic, NO sidecar — keeps F8 sidecar-free + light on the 8GB box).
-    /// Extracts the full document text (per-page concat for fidelity), ensures a key exists (prompting when
-    /// missing — framed as a capability, not a failure), then fills the same Q&A answer. UI +
-    /// extraction + the modal prompt run on main; only the network call is off-main.
-    private func cloudSummarize(_ document: PDFDocument) {
-        ai?.cloudSummarizing()                                        // keep the "Generating…" placeholder
-        let text = Self.fullText(document)
-        guard !text.isEmpty else {
-            ai?.failSummary("Couldn't extract text from this document. It may be a scanned (image) PDF.")
-            return
-        }
-        if CloudBackend.current() == nil {
-            let saved = APIKeyPrompt.promptAndSave(message:
-                "This document is large and needs more powerful processing. Enter an API key to summarize it with a cloud model.")
-            guard saved, CloudBackend.current() != nil else {
-                ai?.infoSummary(Self.cloudNeededMessage)             // cancelled → leave the positive notice
-                return
-            }
-        }
-        Task.detached { [weak self] in
-            guard let self else { return }
-            do {
-                for try await partial in CloudSummarizer.summarizeStream(text) {   // SSE → progressive output
-                    await MainActor.run { self.ai?.streamSummary(partial) }
-                }
-                await MainActor.run { self.ai?.completeSummary() }
-            } catch let e as SummarizationError {
-                await MainActor.run { self.ai?.failSummary(e.errorDescription ?? "Cloud summarization failed.") }
-            } catch {
-                await MainActor.run { self.ai?.failSummary(error.localizedDescription) }
-            }
-        }
-    }
-
-    /// Whole-document text for the cloud path. Per-page `page.string` concat surfaces MORE text than the
-    /// document-level `.string` aggregate on long PDFs (the 2a under-extraction finding), falling back to
-    /// `.string`. PDFKit is main-thread-affine → call on the main thread.
-    private static func fullText(_ document: PDFDocument) -> String {
-        var parts: [String] = []
-        for i in 0..<document.pageCount {
-            if let s = document.page(at: i)?.string, !s.isEmpty { parts.append(s) }
-        }
-        let joined = parts.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        if !joined.isEmpty { return joined }
-        return (document.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Embedder identity baked into the index filename — taken from the ACTIVE embedder (`Embeddings.current`),
