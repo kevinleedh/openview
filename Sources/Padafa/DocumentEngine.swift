@@ -76,7 +76,7 @@ final class DocumentEngine {
         // selected with no key → Apple fallback). Skipped for cloud/Ollama so we don't load it needlessly.
         let provider = ModelProvider(rawValue: Settings.selectedModelProvider) ?? .apple
         if provider == .apple || (provider == .anthropic && !CloudBackend.hasKey()) {
-            if #available(macOS 26, *) { OnDeviceQA.prewarm() }
+            if #available(macOS 26, *) { OnDeviceQA.prewarm(documentKey: dbPath) }
         }
         // Retrieval embedder (e5 Core ML or NLEmbedding fallback — used by EVERY path). Idempotent.
         work.async { Embeddings.prewarm() }
@@ -122,7 +122,7 @@ final class DocumentEngine {
                 switch provider {
                 case .apple:
                     if #available(macOS 26, *), case .available = SummarizationService.availability() {
-                        for try await p in OnDeviceQA.answerFromDocumentStream(question: question, chunks: chunkTexts) {
+                        for try await p in OnDeviceQA.answerFromDocumentStream(question: question, chunks: chunkTexts, documentKey: db) {
                             await MainActor.run { self.ai?.streamAnswer(p) }
                         }
                         await MainActor.run { self.ai?.finishStreamedAnswer() }
@@ -149,7 +149,7 @@ final class DocumentEngine {
                             "Apple Intelligence isn't available on this Mac. Pick a cloud model (add an API key) or connect Ollama in settings.") }
                         return
                     }
-                    raw = try await OnDeviceQA.answerFromDocument(question: question, chunks: chunkTexts)
+                    raw = try await OnDeviceQA.answerFromDocument(question: question, chunks: chunkTexts, documentKey: db)
                 case .anthropic:
                     let key = cloudKey!                          // provider == .anthropic ⇒ a key exists
                     raw = try await CloudQA.answerFromDocument(question: question, chunks: chunkTexts, model: modelId, key: key)

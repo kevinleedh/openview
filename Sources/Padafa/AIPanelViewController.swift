@@ -370,9 +370,11 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
         scrollToBottom()
     }
 
-    /// Fill the pending answer with the AI answer text ONLY — no verification, no source/citation display.
-    /// Verification is disabled and sources are not shown in the UI; the retrieval + NLI grounding engine is
-    /// preserved in code (nli.py / cellverify.py / the sidecar pregenerated path), it's simply not invoked.
+    /// Fill the pending answer with the AI answer text ONLY — no source cue, no verification, no citation chip.
+    /// (A "From page N" hint was tried and removed: with off-topic questions answered freely (raw mode), the
+    /// retrieval-ranked page is often NOT where the answer came from, so the hint advertised a FALSE source. No
+    /// source beats a wrong one.) The NLI grounding engine + verified blue-chip path are preserved in code
+    /// (`completeAnswer`/`answerAttributedString`), simply not invoked here.
     func completeUnverifiedAnswer(_ text: String) {
         guard let host = pendingAnswerHost else { state = .ready; return }
         host.arrangedSubviews.forEach { $0.removeFromSuperview() }
@@ -417,7 +419,7 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
         scrollToBottom()
     }
 
-    /// Streaming finished — the body is already on screen; just finalize. NO source/verification marker.
+    /// Streaming finished — the body is already on screen; just finalize. No source cue / verification marker.
     func finishStreamedAnswer() {
         guard let host = pendingAnswerHost else { state = .ready; return }
         if pendingStreamView == nil {                                    // empty stream → show something
