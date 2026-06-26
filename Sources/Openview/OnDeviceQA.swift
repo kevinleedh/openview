@@ -181,7 +181,33 @@ enum OnDeviceQA {
         let context = chunks.enumerated()
             .map { "[\($0.offset + 1)] \($0.element)" }
             .joined(separator: "\n\n")
-        return "Context passages:\n\(context)\n\nQuestion: \(question)"
+        let prompt = "Context passages:\n\(context)\n\nQuestion: \(question)"
+        logBudget(question: question, chunks: chunks, prompt: prompt)
+        return prompt
+    }
+
+    // MARK: – Token budget (measurement only; behavior-neutral)
+
+    /// Apple on-device context window (no public getter in the SDK — verified against the swiftinterface).
+    private static let contextWindowTokens = 4096
+    /// Approximate token count: ~4 chars/token for English (no public Apple tokenizer). Consistent across docs so
+    /// the relative budget picture is comparable even if absolute counts are rough.
+    private static func approxTokens(_ s: String) -> Int { (s.count + 3) / 4 }
+
+    /// Log the per-question prompt's token composition so the chunk-size / top-k budget can be MEASURED (not
+    /// guessed) against the 4096 window: instructions (session prefix) + the chunks + the question = input, and
+    /// what's left for the answer. Single-turn (a reused session's accumulated transcript is bounded separately
+    /// by the overflow-reset guard). `[budget]` so a sweep over several docs is greppable + comparable.
+    private static func logBudget(question: String, chunks: [String], prompt: String) {
+        let instr = approxTokens(fromDocumentInstructions)
+        let chunkToks = chunks.reduce(0) { $0 + approxTokens($1) }
+        let qToks = approxTokens(question)
+        let promptToks = approxTokens(prompt)           // chunks + question + "[i]"/"Context passages:" framing
+        let input = instr + promptToks
+        let remaining = contextWindowTokens - input
+        let avg = chunks.isEmpty ? 0 : chunkToks / chunks.count
+        NSLog("[budget] instr≈%d k=%d chunkToks≈%d(avg %d) q≈%d prompt≈%d input≈%d/%d outRoom≈%d",
+              instr, chunks.count, chunkToks, avg, qToks, promptToks, input, contextWindowTokens, remaining)
     }
 
     /// Map FoundationModels GenerationError → our distinct SummarizationError (mirrors SummarizationService).
