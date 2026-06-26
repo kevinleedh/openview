@@ -37,8 +37,11 @@ enum DocumentIndex {
     // everything from NLEmbedding's 0.2–0.6 scale), so they live on the active `EmbeddingProvider`
     // (`gateLow`/`gateHigh`) and `gate(_:low:high:)` reads them. Calibrated against a labeled 4-doc × 10-Q
     // sweep (2 papers + a financial report + an economics report):
-    //   • e5 (e5s2-v1): clean separation (on-topic top-1 ≥0.851, off-topic ≤0.850) → single cutoff 0.85 →
-    //     on-pass 100% / off-reject 100% on the eval. "capital of France" (0.77–0.79) is well below → rejected.
+    //   • e5 (e5s2-v1): the FORMAL 4-doc eval separated cleanly at 0.85 (on ≥0.851 / off ≤0.850), but 0.85
+    //     OVER-REJECTS casual questions on other genres — a résumé scored on-topic "who is X" / "current role"
+    //     at 0.80–0.85 → wrongly turned away. Default lowered to ANSWER-FIRST single cutoff 0.80 (user choice);
+    //     off-topic that slips the gate is caught by the LLM ("answer only from the passages"). 0.85 = the
+    //     stricter trust-first point, available via PADAFA_GATE.
     //   • NLEmbedding (nle-v1, the fallback): scores overlap hard (off-topic can out-score on-topic; doc size
     //     inflates both) → two-threshold + BM25 anchor (0.35/0.42) → on 95% / off 60% (its ceiling).
     // Override at runtime with `PADAFA_GATE` / `PADAFA_GATE_HIGH` (apply to whichever embedder is active).

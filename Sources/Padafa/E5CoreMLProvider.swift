@@ -16,12 +16,16 @@ final class E5CoreMLProvider: EmbeddingProvider {
     let identifier = "e5s2-v1"          // ↔ DocumentEngine.embedderTag; bump if the model/pooling changes
     var dimension: Int { 384 }
     var isAvailable: Bool { true }
-    // e5 separates on/off-topic cleanly (calibration: on-topic top-1 ≥0.851, off-topic ≤0.850 across 4 mixed
-    // docs), so a single cosine cutoff works — low == high disables the BM25-anchor branch (which at e5's scale
-    // would re-admit high-cosine off-topic). 0.85 → on 100% / off 100% on the eval; off-reject hugely up from
-    // NLEmbedding's 60% ceiling. Override with PADAFA_GATE (0.84 = more on-topic margin, 0.86 = stricter).
-    let gateLow = gateOverride("PADAFA_GATE", default: 0.85)
-    let gateHigh = gateOverride("PADAFA_GATE_HIGH", default: 0.85)
+    // Single cosine cutoff (low == high → the BM25-anchor branch is OFF; turning it on would re-reject legit
+    // questions that share no word with the doc). The 4-doc calibration (FORMAL Q&A over papers/reports) cleanly
+    // separated at 0.85, but that OVER-REJECTS casual questions on other genres: a résumé scored on-topic
+    // "who is X" / "what is his current role" at 0.80–0.85 (below 0.85), so real questions about the open
+    // document were wrongly turned away. Default lowered to 0.80 (ANSWER-FIRST — user choice): document
+    // questions get answered even when phrased casually; an occasional off-topic question passes the gate and
+    // the LLM (instructed to answer ONLY from the passages) replies "not in this document" as the second line
+    // of defense. Override with PADAFA_GATE (raise = stricter off-topic rejection; 0.85 = the trust-first point).
+    let gateLow = gateOverride("PADAFA_GATE", default: 0.80)
+    let gateHigh = gateOverride("PADAFA_GATE_HIGH", default: 0.80)
 
     private let model: MLModel
     private let tokenizer: WordPieceTokenizer
