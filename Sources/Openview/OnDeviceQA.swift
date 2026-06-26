@@ -33,6 +33,9 @@ enum OnDeviceQA {
     private static var sessions: [String: LanguageModelSession] = [:]
     private static var lru: [String] = []                       // documentKeys, oldest first
     private static let maxSessions = 3
+    // documentKeys whose CURRENT session has already been prewarmed → skip a duplicate prewarm. Cleared when the
+    // session is recreated (overflow reset) or evicted (LRU), so a fresh cold session can be warmed again.
+    private static var prewarmedKeys: Set<String> = []
 
     /// FIXED system instruction (never varies per question → the prefix that stays KV-cached across the reused
     /// session). RAW direction: dense, direct, no forced refusal. The explicit English directive double-enforces
@@ -45,6 +48,12 @@ enum OnDeviceQA {
     /// The reused session for `key`, creating one on first use for this document. Thread-safe (lock-guarded).
     private static func currentSession(documentKey key: String) -> LanguageModelSession {
         lock.lock(); defer { lock.unlock() }
+        return sessionLocked(key)
+    }
+
+    /// Get-or-create `key`'s session. PRECONDITION: `lock` is held (lets `prewarm` do its dedup check + fetch
+    /// under a single lock acquisition without re-entering it).
+    private static func sessionLocked(_ key: String) -> LanguageModelSession {
         if let s = sessions[key] { touch(key); return s }
         return install(LanguageModelSession(instructions: fromDocumentInstructions), for: key)
     }
@@ -54,6 +63,7 @@ enum OnDeviceQA {
     @discardableResult
     private static func resetSession(documentKey key: String) -> LanguageModelSession {
         lock.lock(); defer { lock.unlock() }
+        prewarmedKeys.remove(key)                               // the new session is cold → eligible to warm again
         return install(LanguageModelSession(instructions: fromDocumentInstructions), for: key)
     }
 
@@ -66,6 +76,7 @@ enum OnDeviceQA {
         while lru.count > maxSessions, let oldest = lru.first {
             lru.removeFirst()
             sessions[oldest] = nil
+            prewarmedKeys.remove(oldest)                        // evicted session is gone → drop its warmed flag
         }
         return s
     }
@@ -76,12 +87,24 @@ enum OnDeviceQA {
         lru.append(key)
     }
 
-    /// F8 speed: warm the document's reused session BEFORE the first question, cutting first-token latency. The
-    /// SAME session then answers (the old code prewarmed a throwaway session and answered on fresh ones). No-op
-    /// when Apple Intelligence is unavailable. Cheap + idempotent.
+    /// F8 speed: warm the document's reused session BEFORE the first question, cutting first-token latency — call
+    /// once when the document opens + its index is ready (DocumentEngine.start). The SAME session then answers
+    /// (the old code prewarmed a throwaway session and answered on fresh ones). IDEMPOTENT: the per-document
+    /// `prewarmedKeys` guard means warming the same document's session twice is a no-op, so a duplicate open /
+    /// re-ready can't re-warm it. No-op when Apple Intelligence is unavailable. Meant to be called off-main.
     static func prewarm(documentKey key: String) {
         guard case .available = SummarizationService.availability() else { return }
-        currentSession(documentKey: key).prewarm()
+        lock.lock()
+        if prewarmedKeys.contains(key) {                        // already warmed this doc's session → skip
+            lock.unlock()
+            NSLog("[Openview] prewarm skip (already warmed) %@", (key as NSString).lastPathComponent)
+            return
+        }
+        prewarmedKeys.insert(key)
+        let session = sessionLocked(key)                        // get-or-create under the same lock (no re-entry)
+        lock.unlock()
+        NSLog("[Openview] prewarm Apple session %@", (key as NSString).lastPathComponent)
+        session.prewarm()                                       // outside the lock — don't hold it during the load
     }
 
     /// Answer using the retrieved `chunks` as context, on the document's reused session. On transcript overflow,

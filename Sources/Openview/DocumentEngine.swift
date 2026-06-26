@@ -74,9 +74,12 @@ final class DocumentEngine {
     private func prewarm() {
         // Apple model — only when it will actually be the generator (Apple selected, or an Anthropic model
         // selected with no key → Apple fallback). Skipped for cloud/Ollama so we don't load it needlessly.
+        // Dispatched OFF-MAIN (the model load must not block the UI); OnDeviceQA.prewarm is idempotent per
+        // document, so a duplicate open won't re-warm. dbPath is captured on main (avoids an off-main read).
         let provider = ModelProvider(rawValue: Settings.selectedModelProvider) ?? .apple
         if provider == .apple || (provider == .anthropic && !CloudBackend.hasKey()) {
-            if #available(macOS 26, *) { OnDeviceQA.prewarm(documentKey: dbPath) }
+            let key = dbPath
+            work.async { if #available(macOS 26, *) { OnDeviceQA.prewarm(documentKey: key) } }
         }
         // Retrieval embedder (e5 Core ML or NLEmbedding fallback — used by EVERY path). Idempotent.
         work.async { Embeddings.prewarm() }
