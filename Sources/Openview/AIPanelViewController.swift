@@ -111,6 +111,14 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
     private var turns: [[GroundedSentence]] = []
     private weak var pendingAnswerHost: NSStackView?
     private weak var pendingStreamView: SelfSizingTextView?   // the in-flight streamed (unverified) answer body
+
+    // Chat persistence: completed Q&A turns kept as a serializable model. The document writes them to a sidecar
+    // on SAVE (so Don't Save discards them); `onChatChanged` marks the document dirty so the Save/Don't-Save
+    // prompt governs the chat. `pendingQuestion`/`pendingStreamRaw` pair the in-flight question with its answer.
+    private var savedChat: [ChatTurn] = []
+    private var pendingQuestion: String?
+    private var pendingStreamRaw = ""
+    var onChatChanged: (() -> Void)?
     private var citationPopover: NSPopover?
 
     // MARK: – Layout
@@ -332,6 +340,8 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
 
     func beginQuestion(_ question: String) {
         turns.append([])
+        pendingQuestion = question
+        pendingStreamRaw = ""
         let (container, answerHost) = makeTurnView(question: question)
         threadStack.addArrangedSubview(container)
         container.widthAnchor.constraint(equalTo: threadStack.widthAnchor).isActive = true
@@ -387,6 +397,7 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
             ? styled("(empty response)", color: .labelColor, size: 13)
             : Markdown.attributed(body, size: 13, color: .labelColor)
         addText(to: host, attributed: attributed)
+        recordTurn(answer: text)
         pendingAnswerHost = nil
         state = .ready
         scrollToBottom()
@@ -406,6 +417,7 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
     /// placeholder on the first chunk, then keep updating ONE text view. ``finishStreamedAnswer`` finalizes.
     func streamAnswer(_ cumulative: String) {
         guard let host = pendingAnswerHost else { return }
+        pendingStreamRaw = cumulative       // keep the raw markdown so the finished turn persists with formatting
         // Render Markdown on every snapshot so **bold** / *italic* / bullets appear as the answer flows.
         let attributed = cumulative.isEmpty
             ? styled("…", color: .secondaryLabelColor)
@@ -429,6 +441,7 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
         if pendingStreamView == nil {                                    // empty stream → show something
             addText(to: host, attributed: styled("(empty response)", color: .labelColor, size: 13))
         }
+        recordTurn(answer: pendingStreamRaw)
         pendingStreamView = nil
         pendingAnswerHost = nil
         state = .ready
@@ -444,6 +457,42 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
         pendingAnswerHost = nil
         state = .ready
         scrollToBottom()
+    }
+
+    // MARK: – Chat persistence (the document saves these to a sidecar on ⌘S)
+
+    /// Record a completed Q&A turn for persistence. Skips empty answers and clears the pending question (so an
+    /// error/notice doesn't also get recorded for the same turn). Marks the document dirty via `onChatChanged`
+    /// so the Save / Don't-Save prompt decides whether the chat is kept.
+    private func recordTurn(answer: String) {
+        guard let q = pendingQuestion else { return }
+        pendingQuestion = nil
+        let a = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !a.isEmpty else { return }
+        savedChat.append(ChatTurn(question: q, answer: a))
+        onChatChanged?()
+    }
+
+    /// The chat to persist (queried by the document on save).
+    func currentChat() -> [ChatTurn] { savedChat }
+
+    /// Re-render previously saved turns when the document opens — no engine, no dirty mark (this IS the saved
+    /// state). Each turn renders exactly like a live one: a right-side question bubble + the markdown answer.
+    func restoreChat(_ turns: [ChatTurn]) {
+        guard !turns.isEmpty else { return }
+        loadViewIfNeeded()                  // ensure loadView ran (bottomAnchorSpacer is the first arranged view)
+        savedChat = turns
+        for t in turns {
+            self.turns.append([])
+            let (container, answerHost) = makeTurnView(question: t.question)
+            threadStack.addArrangedSubview(container)
+            container.widthAnchor.constraint(equalTo: threadStack.widthAnchor).isActive = true
+            let body = t.answer.trimmingCharacters(in: .whitespacesAndNewlines)
+            addText(to: answerHost, attributed: body.isEmpty
+                ? styled("(empty response)", color: .labelColor, size: 13)
+                : Markdown.attributed(body, size: 13, color: .labelColor))
+        }
+        scrollToBottom(force: true)
     }
 
     // MARK: – State

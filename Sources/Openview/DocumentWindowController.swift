@@ -112,7 +112,7 @@ final class DocumentWindowController: NSWindowController {
 
     /// Load a parsed PDF into the viewer, title the window (title + proxy icon via representedURL), and
     /// start the grounding engine. The "Page n of N" subtitle is bound live by the PDFViewController delegate.
-    func loadDocument(_ document: PDFDocument?, fileURL: URL? = nil) {
+    func loadDocument(_ document: PDFDocument?, fileURL: URL? = nil, chat: [ChatTurn] = []) {
         splitVC.pdf.load(document)
         splitVC.sidebar.refresh()
 
@@ -121,6 +121,12 @@ final class DocumentWindowController: NSWindowController {
         splitVC.pdf.onMarkupChange = { [weak self] in (self?.document as? NSDocument)?.updateChangeCount(.changeDone) }
         splitVC.pdf.onToolChange = { [weak self] tool in self?.updateToolButtons(tool) }
         (self.document as? OpenviewDocument)?.prepareForSave = { [weak self] in self?.splitVC.pdf.prepareForSave() }
+
+        // Chat ↔ document wiring: a completed Q&A marks the doc dirty (so ⌘S / the close prompt persists it),
+        // the document queries the panel for the chat to save, and any previously-saved chat is re-rendered now.
+        splitVC.ai.onChatChanged = { [weak self] in (self?.document as? NSDocument)?.updateChangeCount(.changeDone) }
+        (self.document as? OpenviewDocument)?.currentChat = { [weak self] in self?.splitVC.ai.currentChat() ?? [] }
+        splitVC.ai.restoreChat(chat)
         // Prefer the NSDocument's fileURL. A PDF on a removable/external volume is loaded via
         // PDFDocument(data:) (the SIGBUS crash-fix), so its `documentURL` is NIL — relying on that would skip
         // engine creation and leave ALL AI features (Q&A) dead for every external-drive PDF.

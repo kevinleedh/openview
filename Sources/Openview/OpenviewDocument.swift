@@ -15,6 +15,17 @@ final class OpenviewDocument: NSDocument {
     /// PDFViewController so a verification citation highlight isn't baked into the saved file.
     var prepareForSave: (() -> Void)?
 
+    /// The AI-panel chat to persist, queried on save (wired by the window controller). Saved to a sidecar in
+    /// `write(to:)` — i.e. only on an actual ⌘S — so "Don't Save" keeps the last-saved chat (or none).
+    var currentChat: (() -> [ChatTurn])?
+
+    /// Chat loaded from the sidecar on open; handed to the window controller to re-render in the panel.
+    private(set) var loadedChat: [ChatTurn] = []
+
+    /// The SOURCE url captured at read time. The chat sidecar is keyed by THIS in both load and save — NOT by
+    /// `write(to:)`'s url (which during a safe-save is a temp path, so it would key differently than the reopen).
+    private var chatKeyURL: URL?
+
     // Explicit ⌘S only — never silently rewrite the user's source PDF in place. (isDocumentEdited is left to
     // NSDocument's change-count machinery so the edited dot + save-on-close prompt work after markup edits.)
     override class var autosavesInPlace: Bool { false }
@@ -38,6 +49,8 @@ final class OpenviewDocument: NSDocument {
             ])
         }
         pdfDocument = doc
+        chatKeyURL = url                                       // key the chat sidecar by the source path
+        loadedChat = ChatStore.load(for: url)                 // restore the saved chat (if any) for this PDF
     }
 
     /// True if the URL lives on a non-internal (removable/external/network) volume.
@@ -54,7 +67,7 @@ final class OpenviewDocument: NSDocument {
         // Pass the source fileURL explicitly: for a removable-volume PDF loaded via PDFDocument(data:), the
         // PDFDocument's own documentURL is nil, so the window controller needs the NSDocument's fileURL to
         // create the grounding (Q&A) engine (otherwise AI features are dead on external drives).
-        controller.loadDocument(pdfDocument, fileURL: fileURL)
+        controller.loadDocument(pdfDocument, fileURL: fileURL, chat: loadedChat)
     }
 
     /// Serialize the in-memory PDFDocument (including the markup annotations) back to PDF data. `dataRepresentation()`
@@ -67,5 +80,14 @@ final class OpenviewDocument: NSDocument {
             ])
         }
         return data
+    }
+
+    /// Persist the AI-panel chat alongside the PDF on an actual save (⌘S / Save As). Because this only runs when
+    /// the document is written, "Don't Save" never updates the sidecar — the chat follows the document's save
+    /// semantics. The chat is keyed by the destination `url`, so Save As carries it to the new file's key.
+    override func write(to url: URL, ofType typeName: String) throws {
+        try super.write(to: url, ofType: typeName)             // writes the PDF (markup) via data(ofType:)
+        // Key by the captured source url (not `url`, which is a temp path during a safe-save) so the reopen finds it.
+        ChatStore.save(currentChat?() ?? [], for: chatKeyURL ?? fileURL ?? url)
     }
 }
