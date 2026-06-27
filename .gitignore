@@ -14,3 +14,10 @@ __pycache__/
 
 # Build-time model-conversion venv (recreate per the header of tools/convert_e5.py)
 tools/.venv/
+
+# Code-signing material — never commit. Certs live in the Keychain; back up a .p12 OFF the repo.
+*.cer
+*.p12
+
+# Build output (signed app + notarized dmg)
+build/

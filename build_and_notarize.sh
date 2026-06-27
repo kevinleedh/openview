@@ -22,7 +22,7 @@ cd "$(dirname "$0")"
 APP_NAME="Openview"
 BUNDLE_ID="com.openview.app"
 TEAM_ID="7ZK3PB84L8"
-SIGN_IDENTITY="Developer ID Application: YOUR NAME (7ZK3PB84L8)"   # <-- from `security find-identity -v -p codesigning`
+SIGN_IDENTITY="Developer ID Application: Donghyeok Lee (7ZK3PB84L8)"   # from `security find-identity -v -p codesigning`
 NOTARY_PROFILE="AC_NOTARY"                                          # <-- the name you used in `notarytool store-credentials`
 SWIFT_PRODUCT="Openview"                                              # the SwiftPM executable target (binary name in build dir)
 ENTITLEMENTS="Openview.entitlements"                               # optional; only used if the file exists
