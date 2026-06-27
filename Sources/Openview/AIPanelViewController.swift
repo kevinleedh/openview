@@ -144,6 +144,11 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
         doc.addSubview(threadStack)
         scrollView.documentView = doc
         scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true        // only show the scroller when the thread actually overflows
+        // The panel content lives BELOW the toolbar (the stack pins to the safe area), so don't let the scroll
+        // view add an automatic top inset for the toolbar — that inset made the documentView taller than the
+        // visible area, so an EMPTY thread was already "scrollable" and showed a phantom scroller.
+        scrollView.automaticallyAdjustsContentInsets = false
         scrollView.drawsBackground = false
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -248,7 +253,9 @@ final class AIPanelViewController: NSViewController, NSTextViewDelegate, NSTextF
 
         root.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: root.topAnchor),
+            // Pin the content to the SAFE AREA top (below the unified toolbar), not root.top — the toolbar was
+            // occluding the panel's top AND the scroll view's auto content-inset for it created a phantom scroller.
+            stack.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor),
             stack.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             stack.bottomAnchor.constraint(equalTo: root.bottomAnchor),
