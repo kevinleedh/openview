@@ -15,18 +15,20 @@ Applications.
 - **Native PDF viewing** — PDFKit-backed continuous scroll, find (`⌘F`), zoom,
   and text markup (highlight / underline / strikethrough) saved back into the PDF
   so other viewers see it too.
-- **On-device AI Q&A** — ask about the open document; answers are grounded in its
-  text with inline `[p.N]` citations you can click to jump to the source.
-  Retrieval uses a bundled **e5-small-v2 Core ML** embedder (+ BM25 + RRF);
-  answering uses Apple's **on-device foundation model**. No document content
-  leaves your Mac.
+- **On-device AI Q&A** — ask about the open document and get answers drawn from
+  its text. Retrieval uses a bundled **e5-small-v2 Core ML** embedder
+  (+ BM25 + RRF) to find the relevant passages; answering uses Apple's
+  **on-device foundation model**. No document content leaves your Mac.
 - **Persistent chat** — the AI conversation is kept with the document and
   restored when you reopen it (only when you save).
 
 ## Requirements
 
-- macOS 14 or later. On-device AI features require an Apple Intelligence–capable
-  Mac.
+- **Viewer:** macOS 14 or later — PDF reading, text markup, and search.
+- **On-device AI Q&A:** an Apple-silicon Mac running **macOS 26 (Tahoe) or later**
+  with Apple Intelligence enabled (the answering uses Apple's `FoundationModels`,
+  which only exists on macOS 26+). On earlier macOS the AI is unavailable and
+  Openview runs as a plain PDF viewer — no crash, the AI calls are version-gated.
 
 ## Build from source
 
@@ -63,4 +65,4 @@ build_and_notarize.sh   release: Developer ID sign + notarize + dmg
 
 ## License
 
-To be decided — until a license file is added, all rights are reserved.
+Released under the [MIT License](LICENSE).
