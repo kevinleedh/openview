@@ -21,3 +21,7 @@ tools/.venv/
 
 # Build output (signed app + notarized dmg)
 build/
+
+# Sample PDFs — kept local only (copyright/confidential); never commit.
+PDF Samples/
+*.pdf
