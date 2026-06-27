@@ -117,7 +117,7 @@ enum OnDeviceQA {
         do {
             return try await respond(currentSession(documentKey: key), to: prompt)
         } catch let e as SummarizationError {
-            guard case .contextWindowExceeded = e else { throw e }
+            guard isRetriable(e) else { throw e }
             return try await respond(resetSession(documentKey: key), to: prompt)   // clean session, retry once
         }
     }
@@ -146,8 +146,10 @@ enum OnDeviceQA {
                         try await run(currentSession(documentKey: key))
                     } catch let error as LanguageModelSession.GenerationError {
                         let mapped = mapGenerationError(error)
-                        // Overflow before any token → clean restart on a fresh session (transcript dropped).
-                        if case .contextWindowExceeded = mapped, !yieldedAny {
+                        // Retriable error before any token → clean restart on a fresh session (overflow drops the
+                        // transcript; the language-locale misfire usually clears on a second try). No dup: nothing
+                        // was emitted yet.
+                        if isRetriable(mapped), !yieldedAny {
                             try await run(resetSession(documentKey: key))
                         } else {
                             throw mapped
@@ -181,9 +183,22 @@ enum OnDeviceQA {
         let context = chunks.enumerated()
             .map { "[\($0.offset + 1)] \($0.element)" }
             .joined(separator: "\n\n")
-        let prompt = "Context passages:\n\(context)\n\nQuestion: \(question)"
+        // Frame the request in clear English on BOTH sides of the question. A terse one-word question (e.g.
+        // "summary") trips the on-device model's input language detector → unsupportedLanguageOrLocale, even with
+        // English context; bracketing it with English keeps the detected language unambiguous.
+        let prompt = "Answer the question in English, using the context passages below.\n\n"
+            + "Context passages:\n\(context)\n\nQuestion: \(question)\n\nAnswer in English."
         logBudget(question: question, chunks: chunks, prompt: prompt)
         return prompt
+    }
+
+    /// Errors worth a one-shot retry on a fresh session: transcript overflow (clean slate) and the intermittent
+    /// language/locale misfire (a fresh session + the English-framed prompt usually clears it).
+    private static func isRetriable(_ e: SummarizationError) -> Bool {
+        switch e {
+        case .contextWindowExceeded, .unsupportedLanguage: return true
+        default:                                            return false
+        }
     }
 
     // MARK: – Token budget (measurement only; behavior-neutral)
