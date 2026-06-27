@@ -25,3 +25,9 @@ build/
 # Sample PDFs — kept local only (copyright/confidential); never commit.
 PDF Samples/
 *.pdf
+
+# Internal-only (planning docs, research/measurement, copyright-derived data) — kept local, never committed.
+files/
+benchmark/
+coordpoc/
+sidecar/

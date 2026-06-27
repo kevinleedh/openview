@@ -1,86 +1,66 @@
-# Openview — Mac PDF AI viewer (AppKit rebuild)
+# Openview
 
-Pure-AppKit, `NSDocument`-based rewrite of Openview (migrating off SwiftUI). The product, principles,
-and feature set are unchanged — only the UI framework. See the spec docs in [`files/`](files/):
-`CLAUDE.md` (constitution), `prd_openview_dev.md` (features), `spec_core_loop_ux.md` (core loop),
-`migration_appkit.md` (this rewrite's plan), `open_decisions.md` (decisions).
+A native macOS PDF viewer with on-device AI. Read PDFs with Preview-grade
+scrolling, and ask questions that are answered **from the document, entirely on
+your Mac**.
 
-## Status — Stage 1 (minimal NSDocument + PDFView shell)
+## Download
 
-Stage 1's only goal is the **BLOCKING native-scroll gate**: open/render/scroll a PDF with `PDFView`
-hosted *directly* in an `NSViewController` (no `NSViewRepresentable`, no SwiftUI in the path), so
-trackpad momentum can be verified as Preview-grade in a pure-AppKit host.
+Get the latest signed & notarized build from the
+[**Releases**](../../releases) page — open the `.dmg` and drag **Openview** into
+Applications.
 
-Foundation checks (the migration doc's "known re-setup risks") — all verified ✅:
+## Features
 
-| Check | Result |
-|---|---|
-| `swift build -c release` (Command Line Tools only, no Xcode) | ✅ builds |
-| `make_app.sh` → `.app` bundle + ad-hoc `codesign` + `lsregister` | ✅ signed, registered (claims `com.adobe.pdf`) |
-| App launch + PDF load | ✅ no crash |
-| Keychain **survives relaunch** of the same signed binary (read-first probe) | ✅ PASS (seeded → survived) |
-| Python sidecar launch + **`warmup` loads the real ML stack** (docling/MLX/torch) → `ok:true` | ✅ PASS (~20s) |
+- **Native PDF viewing** — PDFKit-backed continuous scroll, find (`⌘F`), zoom,
+  and text markup (highlight / underline / strikethrough) saved back into the PDF
+  so other viewers see it too.
+- **On-device AI Q&A** — ask about the open document; answers are grounded in its
+  text with inline `[p.N]` citations you can click to jump to the source.
+  Retrieval uses a bundled **e5-small-v2 Core ML** embedder (+ BM25 + RRF);
+  answering uses Apple's **on-device foundation model**. No document content
+  leaves your Mac.
+- **Persistent chat** — the AI conversation is kept with the document and
+  restored when you reopen it (only when you save).
 
-## Layout
+## Requirements
 
-```
-Package.swift            SwiftPM (macOS 14 floor); OpenviewKit lib + Openview app target
-Info.plist               CFBundleDocumentTypes → PDF, bound to OpenviewDocument
-make_app.sh              swift build → assemble Openview.app → ad-hoc sign → lsregister
-Sources/
-  OpenviewKit/             ported as-is (UI-independent engine logic)
-    CoordinateAdapter.swift   Docling/PyMuPDF bbox → PDFKit page-point (the y-flip; IoU 0.931)
-    SidecarClient.swift       Swift ↔ Python sidecar, JSON-lines over stdin/stdout
-  Openview/                the AppKit app shell (Stage 1)
-    main.swift                NSApplication bootstrap (programmatic, no nib)
-    MainMenu.swift            File ▸ Open… etc., wired through the responder chain
-    AppDelegate.swift         open flow + Preview-style empty-launch panel
-    OpenviewDocument.swift      NSDocument wrapping PDFDocument (read-only viewer)
-    DocumentWindowController.swift   window + frame autosave (single doc, no tabs)
-    PDFViewController.swift   hosts PDFView directly (.singlePageContinuous, autoScales)
-    FoundationCheck.swift     Stage-1 Keychain + sidecar probes
-sidecar/                 ported Python sidecar (parse → window → embed → retrieve → ground)
-benchmark/               ported harnesses (coord_accuracy.py, memory_fit.py)
-PDF Samples/             test PDFs
-```
+- macOS 14 or later. On-device AI features require an Apple Intelligence–capable
+  Mac.
 
-## Build & run
+## Build from source
+
+There's no Xcode project — Openview is a Swift Package built with the Command
+Line Tools.
 
 ```bash
-./make_app.sh                                  # build + bundle + sign + register (release)
-open Openview.app --args "$PWD/PDF Samples/1706.03762v7.pdf"   # open a specific PDF
-open Openview.app                                # launch → Preview-style open panel
+git clone https://github.com/kevinleedh/openview.git
+cd openview
+./make_app.sh        # swift build -c release → assemble Openview.app → ad-hoc sign → install to ~/Applications
 ```
 
-- `⌘O` opens a PDF; Finder **Open With → Openview** works (Launch Services registered). Closing the
-  PDF (`⌘W`) then clicking the Dock icon re-presents the open panel (never a dead-end blank state).
-- **Debug ▸ Run Foundation Self-Test** (`⌘⇧T`) runs the Keychain persistence check and the sidecar
-  probe. The sidecar probe sends a real `warmup` (loads the ML models, ~20–30s) so a PASS proves the
-  whole stack runs — not just that the process launches.
-- Sidecar interpreter defaults to the miniforge base Python; override with `OPENVIEW_PYTHON=/path/to/python3`.
+Then launch it from `~/Applications`, or `open ~/Applications/Openview.app`.
 
-## The BLOCKING verification (do this on the trackpad)
+### Packaging
 
-Per `files/migration_appkit.md` Stage 1 — open a PDF and scroll with the **trackpad**:
+- `tools/make_dmg.sh` — build a drag-to-Applications `.dmg` (ad-hoc signed; for
+  local testing / sharing).
+- `build_and_notarize.sh` — the release pipeline: Developer ID signing + hardened
+  runtime → notarize → staple → a notarized `.dmg`. Requires your own *Developer
+  ID Application* certificate and notary credentials (see the script header).
 
-> Does the PDF scroll with true native, Preview-grade momentum **and mid-glide chain-in** (flick,
-> then flick again before it stops — the second flick should add to the glide), in this pure-AppKit host?
+## Project layout
 
-- **YES** → the rewrite is justified; proceed to Stage 2 (split layout + `NSToolbar`).
-- **NO / same as the old build** → **STOP**. The scroll issue was never the SwiftUI host, so rewriting
-  the rest won't fix it. Re-evaluate before spending more.
+```
+Package.swift           SwiftPM manifest (OpenviewKit lib + Openview app + coordcli)
+Info.plist              app metadata; binds the PDF document type to OpenviewDocument
+Sources/Openview/       the AppKit app — NSDocument, PDF view, AI panel, retrieval + on-device QA
+Sources/OpenviewKit/    UI-independent engine helpers
+tools/                  bundled Core ML model + tokenizer, and the icon / dmg build scripts
+make_app.sh             dev build → ~/Applications
+build_and_notarize.sh   release: Developer ID sign + notarize + dmg
+```
 
-## Progress
+## License
 
-- **Stage 1** ✅ — minimal NSDocument + PDFView-direct shell; native scroll confirmed.
-- **Stage 2** ✅ — `NSSplitViewController` (center PDF | right AI, on-demand left sidebar) + `NSToolbar`
-  (view-options / page / zoom / `⌘F` find / ✦ AI toggle); in-document search.
-- **Stage 3** ✅ — AI panel reconnected to the ported grounding engine (`SidecarBridge` + `DocumentEngine`):
-  ingest on open → ask → grounded answer with inline `[p.N]` citation chips → click → jump + highlight (F4);
-  honest not-found. **Local MLX backend (no API key).** First answer is slow (~30–40s, cold model load),
-  then ~4s; the per-document index is cached in `~/Library/Application Support/Openview/index/`.
-
-### Not yet built (later stages, per the spec)
-Stage 4 — model selector + settings (7 providers, dynamic `/models`, Keychain) to supply the cloud
-BYO-key backend (the `answer(backend:)` slot is ready). Then: F7 area selection, multi-turn chat UI,
-out-of-document answers, F6 local-model download (all Planned).
+To be decided — until a license file is added, all rights are reserved.
