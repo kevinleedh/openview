@@ -24,6 +24,8 @@ mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Resources"
 cp "$BIN" "$STAGE/Contents/MacOS/Openview"
 cp Info.plist "$STAGE/Contents/Info.plist"
 printf 'APPL????' > "$STAGE/Contents/PkgInfo"
+# App icon (Info.plist CFBundleIconFile = AppIcon). Generated from the logo by tools/make_icon.sh.
+[ -f tools/artifacts/AppIcon.icns ] && cp tools/artifacts/AppIcon.icns "$STAGE/Contents/Resources/AppIcon.icns"
 # No Python sidecar. Embeddings = e5-small-v2 via Core ML (bundled .mlpackage) + a pure-Swift tokenizer, so
 # a plain .dmg download runs the AI features with ZERO extra installs (inference is Swift+CoreML, no torch).
 # Built once by tools/convert_e5.py → tools/artifacts/. Falls back to NLEmbedding if the model is absent.

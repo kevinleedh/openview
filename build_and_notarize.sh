@@ -60,6 +60,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/$APP_NAME"
 cp Info.plist "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
+# App icon (CFBundleIconFile = AppIcon). Generated from the logo by tools/make_icon.sh.
+[ -f tools/artifacts/AppIcon.icns ] && cp tools/artifacts/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # No Python sidecar — embeddings = e5-small-v2 via Core ML (bundled .mlpackage) + Swift tokenizer, zero installs.
 if [ -d tools/artifacts/e5-small-v2.mlpackage ]; then
   cp -R tools/artifacts/e5-small-v2.mlpackage "$APP/Contents/Resources/"

@@ -5,6 +5,7 @@
     <key>CFBundleName</key>                  <string>Openview</string>
     <key>CFBundleDisplayName</key>           <string>Openview</string>
     <key>CFBundleExecutable</key>            <string>Openview</string>
+    <key>CFBundleIconFile</key>              <string>AppIcon</string>
     <key>CFBundleIdentifier</key>            <string>com.openview.app</string>
     <key>CFBundlePackageType</key>           <string>APPL</string>
     <key>CFBundleInfoDictionaryVersion</key> <string>6.0</string>
